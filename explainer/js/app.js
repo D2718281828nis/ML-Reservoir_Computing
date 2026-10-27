@@ -19,6 +19,7 @@ main();
 
 async function main() {
   setupTex();
+  setupTheme();
   setupScrollSpy();
   const boot = (id, init, ...args) => {
     try {
@@ -59,6 +60,29 @@ async function main() {
     resetPalette();
     redrawAll();
   });
+}
+
+// Light or dark: follows the system until the reader picks one, then remembers the choice in this browser.
+function setupTheme() {
+  const btn = $("theme-toggle");
+  if (!btn) return;
+  const root = document.documentElement;
+  const dark = () => (root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches);
+  const label = () => (btn.textContent = dark() ? "☀" : "☾");
+  label();
+  btn.addEventListener("click", () => {
+    const next = dark() ? "light" : "dark";
+    root.dataset.theme = next;
+    try {
+      localStorage.setItem("rc-theme", next);
+    } catch {
+      /* private mode: the choice lasts for this page only */
+    }
+    label();
+    resetPalette();
+    redrawAll();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", label);
 }
 
 function redrawAll() {

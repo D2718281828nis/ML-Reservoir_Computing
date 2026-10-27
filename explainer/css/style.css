@@ -55,6 +55,7 @@
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #121316; --surface: #1a1b20; --surface-2: #23252c; --ink: #ecebe7; --ink-2: #c9c7c0; --muted: #8f8c85;
   --line: #2d2f37; --line-strong: #444754; --accent: #8f9bff; --accent-ink: #12131a; --accent-soft: #272b4a;
   --warn: #fdba74; --warn-soft: #3a2a1d;
@@ -478,3 +479,13 @@ svg.eigviz { display: block; width: 100%; height: auto; background: var(--surfac
 .eigviz .ev { fill: var(--s1); stroke: var(--surface); stroke-width: .8; cursor: default; }
 .eigviz .lbl { font: 11px var(--font); fill: var(--muted); }
 .panel-title .greek { text-transform: none; }
+
+:root[data-theme="light"] { color-scheme: light; }
+.theme-toggle { cursor: pointer; font-size: 15px; line-height: 1; min-width: 34px; background: transparent; color: inherit; font-family: var(--font); }
+
+/* 2.1 the data splits: training, validation and test */
+.chart .zone-edge { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; }
+.legend-row i.bg-zone-train { background: color-mix(in srgb, var(--muted) 32%, transparent); }
+.legend-row i.bg-zone-val { background: color-mix(in srgb, var(--muted) 14%, transparent); border: 1px dashed var(--line-strong); }
+.legend-row i.bg-zone-test { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.legend-row i.bg-zone-window { background: transparent; border: 1.5px solid var(--accent); }

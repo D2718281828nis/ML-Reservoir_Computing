@@ -81,6 +81,7 @@ export function initFlow(root) {
   const status = h("p", { class: "sub" });
   const panel = h("div", { class: "flow-panel" });
   const chartBox = h("div");
+  const overviewBox = h("div");
   root.replaceChildren(
     h("div", { class: "controls" }, back, step, play, tCtl, tourBtn),
     h("div", { class: "controls" }, exCtl, h("span", { class: "ctl" }, h("span", { class: "lbl" }, T.esnShort)), rhoCtl, leakCtl, lamCtl),
@@ -92,6 +93,9 @@ export function initFlow(root) {
     h("p", { class: "panel-title" }, T.flowChartTitle(MG.H)),
     legendRow([["ink", T.truth], ["s2", T.ffn], ["s1", T.esn]]),
     chartBox,
+    h("p", { class: "panel-title" }, T.splitTitle),
+    legendRow([["zone-train", T.zoneTrain], ["zone-val", T.zoneVal], ["zone-test", T.zoneTest], ["zone-window", T.zoneWindow]]),
+    overviewBox,
   );
 
   // train the small FFN once, in slices, so the page stays responsive
@@ -473,10 +477,23 @@ export function initFlow(root) {
     return h("div", { class: "formula" }, h("span", { class: "tex", dataset: { tex: texSrc } }, plain));
   }
 
+  // the chronological splits of the series, as shaded bands: training, validation (where λ and the best epoch are chosen), test
+  function zoneBands(a, b, y0, y1) {
+    const zones = [[0, MG.trainEnd, "var(--muted)", 0.16], [MG.trainEnd, MG.valEnd, "var(--muted)", 0.06], [MG.valEnd, MG.n, "var(--accent)", 0.08]];
+    return zones.filter(([z0, z1]) => z1 > a && z0 < b).map(([z0, z1, color, opacity]) => {
+      const xs = [Math.max(a, z0), Math.min(b, z1)];
+      return { xs, lo: [y0, y0], hi: [y1, y1], color, opacity };
+    });
+  }
+  const zoneMarks = [{ x: MG.trainEnd, cls: "zone-edge", label: T.zoneVal }, { x: MG.valEnd, cls: "zone-edge", label: T.zoneTest }];
+  const zLo = Math.min(...flow.z);
+  const zHi = Math.max(...flow.z);
+
   function drawChart() {
     const W = widthOf(root);
-    const from = Math.max(flow.T.test[0], st.t - 120);
-    const origins = Array.from({ length: st.t - from + 1 }, (_, i) => from + i);
+    // the view reaches back before the test part, so its start shows the validation data next to it
+    const from = st.t - 120;
+    const origins = Array.from({ length: st.t - Math.max(from, flow.T.test[0]) + 1 }, (_, i) => Math.max(from, flow.T.test[0]) + i);
     const xsF = origins.map((o) => o + MG.H);
     const ff = [];
     const ee = [];
@@ -485,16 +502,36 @@ export function initFlow(root) {
       ee.push(flowESNPred(o));
     }
     const truthXs = Array.from({ length: st.t + MG.H - (from + MG.H) + 1 + MG.H }, (_, i) => from + i);
+    const shown = [...truthXs.map((x) => flow.z[x]), ...ff, ...ee];
+    const pad = 0.06 * (Math.max(...shown) - Math.min(...shown));
+    const y0 = Math.min(...shown) - pad;
+    const y1 = Math.max(...shown) + pad;
     chartBox.replaceChildren(lineChart({
-      width: W, height: 200,
+      width: W, height: 200, x0: from, x1: st.t + MG.H, y0, y1,
+      bands: zoneBands(from, st.t + MG.H, y0, y1),
       series: [
         { xs: truthXs, ys: truthXs.map((x) => flow.z[x]), cls: "ink", label: T.truth },
         { xs: xsF, ys: ff, cls: "s2", label: T.ffn },
         { xs: xsF, ys: ee, cls: "s1", label: T.esn },
       ],
-      marks: [{ x: st.t, cls: "now", label: "t" }, { x: st.t + MG.H, cls: "now", label: "t+20" }],
+      marks: [...zoneMarks, { x: st.t, cls: "now", label: "t" }, { x: st.t + MG.H, cls: "now", label: "t+20" }],
       points: [{ x: st.t + MG.H, y: ffn.y, cls: "s2" }, { x: st.t + MG.H, y: esn.y, cls: "s1" }],
       xLabel: T.timeStep, yFmt: (v) => fmt(v, 1), tipFmt: (v) => fmt(v, 3), tipTitle: (x) => `t = ${x}`,
+    }));
+
+    // the whole series: where the chart above sits among the splits
+    const step = 4;
+    const xsAll = Array.from({ length: Math.floor((MG.n - 1) / step) + 1 }, (_, i) => i * step);
+    const pz = 0.05 * (zHi - zLo);
+    const oy0 = zLo - pz;
+    const oy1 = zHi + pz;
+    overviewBox.replaceChildren(lineChart({
+      width: W, height: 96, x0: 0, x1: MG.n - 1, y0: oy0, y1: oy1, yTicks: [], hover: false,
+      xTicks: [0, MG.trainEnd, MG.valEnd, MG.n], xFmt: (v) => fmt(v, 0),
+      bands: [...zoneBands(0, MG.n, oy0, oy1), { xs: [from, st.t + MG.H], lo: [oy0, oy0], hi: [oy1, oy1], color: "var(--accent)", opacity: 0.3 }],
+      series: [{ xs: xsAll, ys: xsAll.map((x) => flow.z[x]), cls: "ink", thin: true }],
+      marks: [{ x: MG.trainEnd, cls: "zone-edge" }, { x: MG.valEnd, cls: "zone-edge" }],
+      margin: { l: 42, r: 12, t: 6, b: 22 },
     }));
   }
   function flowESNPred(o) {
