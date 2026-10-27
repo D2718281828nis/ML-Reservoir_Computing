@@ -32,6 +32,7 @@ All numbers are produced by the page itself (and again, in numpy, by notebook 00
 | ECG, 4–100 ms ahead | ESN best at 4 ms (0.08 vs 0.20); further out ESN and FFN are close |
 | Closed loop on Mackey–Glass | ESN stays valid ≈ 540–860 steps, FFN ≈ 65–150 |
 | Lorenz-63, 400 training points | NG-RC ≈ 4 Lyapunov times with 84 weights and 1 warm-up point; ESN ≈ 3.5 (it catches up with ≥ 1,000 points) |
+| Plant identification (2nd-order state-space model) | a 50-neuron reservoir reaches test NRMSE ≈ 6·10⁻⁴; read as (A, B, C, D) it matches the plant's impulse response to 0.1 % and its Hankel singular values show effective order 2 |
 
 ## 2. Curriculum
 

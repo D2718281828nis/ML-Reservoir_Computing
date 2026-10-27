@@ -489,3 +489,17 @@ svg.eigviz { display: block; width: 100%; height: auto; background: var(--surfac
 .legend-row i.bg-zone-val { background: color-mix(in srgb, var(--muted) 14%, transparent); border: 1px dashed var(--line-strong); }
 .legend-row i.bg-zone-test { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .legend-row i.bg-zone-window { background: transparent; border: 1.5px solid var(--accent); }
+
+/* 8 control theory: signal-flow graphs and the z-plane */
+.ctl-graph { max-width: 560px; }
+svg.ctlviz { display: block; width: 100%; height: auto; background: var(--surface-2); border-radius: 10px; }
+.ctlviz .ctl-edge { fill: none; opacity: .9; }
+.ctlviz .ctl-edge.thin { opacity: .55; }
+.ctlviz .ctl-elabel { font: 500 11px var(--mono); fill: var(--ink-2); paint-order: stroke; stroke: var(--surface-2); stroke-width: 3px; }
+.ctlviz .ctl-node circle { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.4; }
+.ctlviz .ctl-node.state circle { fill: var(--accent-soft); stroke: var(--accent); }
+.ctlviz .ctl-node.small circle { stroke-width: 1; }
+.ctlviz .ctl-node .ring { fill: none; stroke: var(--accent); stroke-width: 1; }
+.ctlviz .ctl-node.io-out circle { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.8; }
+.ctlviz .ctl-node text { font: 600 13px var(--font); fill: var(--ink); pointer-events: none; }
+.eigviz .pole line { stroke: var(--ink); stroke-width: 2.2; }

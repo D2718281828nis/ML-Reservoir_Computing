@@ -39,6 +39,8 @@
       <a href="#fc-lab">прогноз</a><a href="#fc-free">свободный ход</a>
       <span class="arrow">→</span>
       <a href="#ng-count">NG-RC</a><a href="#ng-lorenz">Лоренц</a>
+      <span class="arrow">→</span>
+      <a href="#ctl-abcd">ТАУ</a>
     </nav>
     <a class="top-link" href="https://github.com/D2718281828nis/ML-Reservoir_Computing" title="Исходный код и ноутбуки">GitHub</a>
     <button class="top-link theme-toggle" id="theme-toggle" type="button" title="Переключить светлую и тёмную тему" aria-label="Переключить светлую и тёмную тему">◐</button>
@@ -65,7 +67,8 @@
     <a href="#s-race"><b><i>5</i>Сравнение</b><span>четыре модели, одна задача, один секундомер</span></a>
     <a href="#s-fc"><b><i>6</i>Прогнозирование</b><span>реальные данные, честные эталоны, свободный ход</span></a>
     <a href="#s-ng"><b><i>7</i>NG-RC</b><span>резервуар заменён задержками и их произведениями</span></a>
-    <a href="#s-end"><b><i>8</i>Заключение</b><span>что и когда выбирать; ноутбуки</span></a>
+    <a href="#s-ctl"><b><i>8</i>Теория управления</b><span>резервуар как модель (A, B, C, D)</span></a>
+    <a href="#s-end"><b><i>9</i>Заключение</b><span>что и когда выбирать; ноутбуки</span></a>
   </nav>
   <ul class="howto">
     <li><b>Наводите</b> курсор на графики, чтобы читать значения. Каждая модель на странице обучается в вашем браузере, на обычном JavaScript; <code>tools/check.mjs</code> сверяет эту математику с numpy.</li>
@@ -477,10 +480,86 @@
   </article>
 </section>
 
-<!-- ───────────────────────── 8. Выводы ───────────────────────── -->
-<section class="stage" id="s-end">
+<!-- ───────────────────────── 8. Теория управления ───────────────────────── -->
+<section class="stage" id="s-ctl">
   <header class="stage-head">
     <span class="stage-num">8</span>
+    <div>
+      <h2>Теория автоматического управления и резервуарные вычисления</h2>
+      <p>Модель в пространстве состояний (A, B, C, D) — основной язык теории управления. Обученный резервуар оказывается моделью того же вида:
+        случайные A и B, обученные C и D.</p>
+    </div>
+  </header>
+
+  <article class="step" id="ctl-ss">
+    <h3><span class="step-num">8.1</span> Модели в пространстве состояний</h3>
+    <p>Линейная стационарная система с дискретным временем, одним входом <span class="tex" data-tex="u(t)">u(t)</span> и одним выходом
+      <span class="tex" data-tex="y(t)">y(t)</span> задаётся четвёркой матриц <span class="tex" data-tex="(A, B, C, D)">(A, B, C, D)</span>:</p>
+    <div class="formula"><span class="tex" data-tex="x(t) = A\,x(t-1) + B\,u(t), \qquad y(t) = C\,x(t) + D\,u(t)">x(t) = A x(t−1) + B u(t), y(t) = C x(t) + D u(t)</span></div>
+    <p>Здесь <span class="tex" data-tex="x(t) \in \mathbb{R}^n">x(t) ∈ ℝⁿ</span> — вектор состояния, <span class="tex" data-tex="A">A</span> — матрица динамики,
+      <span class="tex" data-tex="B">B</span> — матрица входа, <span class="tex" data-tex="C">C</span> — матрица выхода, <span class="tex" data-tex="D">D</span> — прямая передача.
+      Мы используем ту же синхронизацию, что и в ESN (состояние обновляется входом <span class="tex" data-tex="u(t)">u(t)</span> до чтения выхода); от стандартной
+      записи она отличается лишь сдвигом состояния на один шаг. Отображение «вход — выход» полностью задаётся импульсной характеристикой (марковскими параметрами)
+      и передаточной функцией:</p>
+    <div class="formula"><span class="tex" data-tex="h(0) = CB + D,\quad h(k) = C A^{k} B \ (k \ge 1), \qquad G(z) = \sum_{k \ge 0} h(k)\, z^{-k} = C\big(I - A z^{-1}\big)^{-1} B + D">h(0) = CB + D, h(k) = C Aᵏ B, G(z) = C (I − A z⁻¹)⁻¹ B + D</span></div>
+    <p>В качестве объекта управления возьмём систему второго порядка с парой комплексно-сопряжённых полюсов <span class="tex" data-tex="z = r e^{\pm i\theta}">z = r·e^{±iθ}</span>
+      в канонической управляемой форме; <span class="tex" data-tex="C">C</span> выбрана так, чтобы статический коэффициент усиления (без <span class="tex" data-tex="D">D</span>) был равен 1.
+      Радиус <span class="tex" data-tex="r">r</span> задаёт затухание (чем ближе к 1, тем медленнее), угол <span class="tex" data-tex="\theta">θ</span> — частоту колебаний в радианах за шаг.
+      Возбуждением служит случайная ступенчатая последовательность — стандартный тестовый сигнал в идентификации систем.</p>
+    <div class="viz" id="viz-plant"></div>
+  </article>
+
+  <article class="step" id="ctl-ident">
+    <h3><span class="step-num">8.2</span> Эксперимент: идентификация объекта резервуаром</h3>
+    <p>Резервуар из 50 нейронов получает на вход ту же последовательность <span class="tex" data-tex="u(t)">u(t)</span>, а считывание обучается воспроизводить выход объекта
+      <span class="tex" data-tex="y(t)">y(t)</span>. Это задача идентификации системы: по записи входа и выхода построить модель, которая предсказывает выход для нового входа.
+      Смещение <span class="tex" data-tex="b">b</span> равно нулю, усиление входа мало, поэтому нейроны работают в линейной области <span class="tex" data-tex="\tanh">tanh</span>.
+      Обучение — одно решение гребневой регрессии; λ выбирается на валидационной части, качество оценивается на тестовой.</p>
+    <div class="viz" id="viz-ident"></div>
+    <p>При исходных настройках NRMSE на тесте порядка <span class="tex" data-tex="10^{-3}">10⁻³</span> и меньше. Три наблюдения. Во-первых, при α = 1 ошибка возрастает
+      примерно до 0,02: собственные значения <span class="tex" data-tex="A">A</span> заполняют круг с центром в нуле, тогда как полюса низкочастотного объекта лежат вблизи
+      <span class="tex" data-tex="z = 1">z = 1</span>. Утечка сдвигает этот круг к единице (раздел 1.3). Во-вторых, для медленного объекта (r = 0,97, θ = 0,05) при α = 0,5 ошибка
+      около 0,18, а при α = 0,2 — около 0,006: собственные значения резервуара должны покрывать область, где находятся полюса объекта. В-третьих, при усилении входа 1
+      нейроны выходят в нелинейную область <span class="tex" data-tex="\tanh">tanh</span>, и ошибка растёт до 0,08: линейный объект хуже описывается нелинейной моделью.</p>
+  </article>
+
+  <article class="step" id="ctl-abcd">
+    <h3><span class="step-num">8.3</span> Обученный резервуар как модель (A, B, C, D)</h3>
+    <p>Линеаризуем уравнение резервуара в точке <span class="tex" data-tex="x = 0">x = 0</span> при <span class="tex" data-tex="b = 0">b = 0</span>, где
+      <span class="tex" data-tex="\tanh'(0) = 1">tanh′(0) = 1</span>:</p>
+    <div class="formula"><span class="tex" data-tex="x(t) = \underbrace{\big[(1-\alpha) I + \alpha W\big]}_{A}\, x(t-1) + \underbrace{\alpha\, W_{\text{in}}}_{B}\, u(t), \qquad \hat y(t) = \underbrace{W_{\text{out}}^{(x)}}_{C}\, x(t) + \underbrace{W_{\text{out}}^{(u)}}_{D}\, u(t) + w_0">x(t) = [(1−α)I + αW] x(t−1) + α W_in u(t), ŷ(t) = W_out(x) x(t) + W_out(u) u(t) + w₀</span></div>
+    <p>Резервуар, таким образом, является моделью в пространстве состояний, у которой <span class="tex" data-tex="A">A</span> и <span class="tex" data-tex="B">B</span>
+      выбраны случайно и зафиксированы, а обучаются только <span class="tex" data-tex="C">C</span> и <span class="tex" data-tex="D">D</span> (и постоянная <span class="tex" data-tex="w_0">w₀</span>).
+      Граф резервуара из раздела 2.3 — это сигнальный граф матрицы <span class="tex" data-tex="A">A</span>: вершины — переменные состояния, рёбра — её ненулевые элементы,
+      веера от входа и к выходу — <span class="tex" data-tex="B">B</span> и <span class="tex" data-tex="C">C</span>. Собственные значения
+      <span class="tex" data-tex="A">A</span> равны <span class="tex" data-tex="1 - \alpha + \alpha\,\lambda_i(W)">1 − α + α·λᵢ(W)</span> и лежат в круге с центром 1 − α и радиусом αρ.</p>
+    <div class="viz" id="viz-abcd"></div>
+    <p>С точки зрения теории управления из этого следует несколько выводов.</p>
+    <ul>
+      <li><b>Неминимальная реализация.</b> Резервуар реализует передаточную функцию второго порядка с помощью 50 состояний. Сингулярные числа Ганкеля
+        <span class="tex" data-tex="\sigma_i">σᵢ</span> матрицы <span class="tex" data-tex="[h(i+j+1)]">[h(i+j+1)]</span> показывают действительный порядок отображения: у обученного
+        резервуара после двух значимых чисел следует спад примерно на три порядка. Методы понижения порядка (например, сбалансированное усечение) позволили бы
+        получить из него модель второго порядка.</li>
+      <li><b>Неединственность реализации.</b> Преобразование подобия <span class="tex" data-tex="x \to Tx">x → Tx</span> не меняет <span class="tex" data-tex="G(z)">G(z)</span>,
+        а в неминимальной реализации <span class="tex" data-tex="C">C</span> и <span class="tex" data-tex="D">D</span> могут компенсировать друг друга. Поэтому обученная
+        <span class="tex" data-tex="D">D</span> не совпадает с <span class="tex" data-tex="D">D</span> объекта, хотя <span class="tex" data-tex="h(0) = CB + D">h(0) = CB + D</span> совпадает.
+        Данные определяют отображение «вход — выход», а не матрицы.</li>
+      <li><b>Связь с моделями на ортонормированных базисах.</b> В идентификации систем давно используются модели, в которых полюса фиксируются заранее
+        (базисы Лагерра и Каутца), а выходные коэффициенты находятся методом наименьших квадратов. Линейный резервуар — модель того же класса со случайно
+        выбранными полюсами; поэтому качество зависит от того, насколько собственные значения <span class="tex" data-tex="A">A</span> покрывают полюса объекта.</li>
+      <li><b>Устойчивость.</b> Линеаризованный резервуар асимптотически устойчив, если все собственные значения <span class="tex" data-tex="A">A</span> лежат внутри
+        единичной окружности. Для линейного резервуара это и есть свойство эхо-состояний; для нелинейного условие ρ &lt; 1 лишь эмпирическое (раздел 4.2).</li>
+      <li><b>Границы интерпретации.</b> При большом усилении входа резервуар — нелинейная модель <span class="tex" data-tex="x(t) = f\big(x(t-1), u(t)\big)">x(t) = f(x(t−1), u(t))</span>,
+        и прочтение (A, B, C, D) становится локальным: <span class="tex" data-tex="A">A</span> и <span class="tex" data-tex="B">B</span> — якобианы
+        <span class="tex" data-tex="f">f</span> в рабочей точке. Попробуйте усиление входа 1 в разделе 8.2: импульсные характеристики расходятся.</li>
+    </ul>
+  </article>
+</section>
+
+<!-- ───────────────────────── 9. Выводы ───────────────────────── -->
+<section class="stage" id="s-end">
+  <header class="stage-head">
+    <span class="stage-num">9</span>
     <div>
       <h2>Заключение</h2>
       <p>Ни одно семейство не выигрывает везде. Каждое выигрывает там, где выполняются его предположения.</p>
@@ -488,7 +567,7 @@
   </header>
 
   <article class="step" id="end-choose">
-    <h3><span class="step-num">8.1</span> Рекомендации по выбору модели</h3>
+    <h3><span class="step-num">9.1</span> Рекомендации по выбору модели</h3>
     <div class="viz scroll-x">
       <table class="tbl compare">
         <thead><tr><th></th><th>FFN (backprop)</th><th>ESN (резервуар)</th><th>NG-RC</th></tr></thead>
@@ -506,7 +585,7 @@
   </article>
 
   <article class="step" id="end-notebooks">
-    <h3><span class="step-num">8.2</span> Сопутствующие ноутбуки</h3>
+    <h3><span class="step-num">9.2</span> Сопутствующие ноутбуки</h3>
     <ul class="nb-list">
       <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/00_ffn_vs_reservoir_computing.ipynb" target="_blank" rel="noopener"><b>00 · FFN против резервуарных вычислений</b></a>: все опыты этой страницы на numpy, шаг за шагом. Начните с него.</li>
       <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/01_esn_lsm_rnn_sine_generator.ipynb" target="_blank" rel="noopener"><b>01 · ESN, LSM и RNN на генераторе синуса</b></a>: три модели для синуса с частотной модуляцией.</li>

@@ -8,6 +8,7 @@ import { initFFN } from "./sec-ffn.js";
 import { initInside, initMemory } from "./sec-reservoir.js";
 import { initRace } from "./sec-race.js";
 import { initKnobs } from "./sec-knobs.js";
+import { initControl } from "./sec-control.js";
 import { initLab, initFree } from "./sec-forecast.js";
 import { initCount, initLorenz } from "./sec-ngrc.js";
 
@@ -42,6 +43,7 @@ async function main() {
   boot("viz-free", initFree);
   boot("viz-count", initCount);
   boot("viz-lorenz", initLorenz);
+  boot("viz-plant", initControl, $("viz-ident"), $("viz-abcd"));
 
   $("viz-lab").replaceChildren(placeholder(T.loading));
   await loadJSON(ASSETS + "series.json")

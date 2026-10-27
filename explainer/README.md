@@ -9,7 +9,8 @@ An interactive page about feed-forward neural networks against reservoir computi
 5. **Comparative evaluation.** Linear AR, ELM, ESN and FFN on one task against the wall clock; the ELM separates "readout-only training" from "recurrence".
 6. **Forecasting real-world time series.** A lab on daily electricity demand (Spain), an ECG and Mackey–Glass, with chronological splits, baselines (persistence, same day last week) and NRMSE by horizon; then closed-loop free runs.
 7. **Next-generation reservoir computing (NG-RC).** Next-generation reservoir computing: a feature counter, and NG-RC against an ESN on Lorenz-63, with valid time in Lyapunov times and ablations.
-8. **Conclusions** and the accompanying notebooks.
+8. **Automatic control theory and reservoir computing.** A second-order plant in state-space form (A, B, C, D), drawn as a signal-flow graph with its poles; a 50-neuron reservoir identifies it from a random-staircase excitation (one ridge solve); the trained reservoir, linearized at x = 0, is read back as A = (1−α)I + αW, B = αW_in, C, D, with its eigenvalues against the plant's poles, both impulse responses, and Hankel singular values showing an effective order of 2.
+9. **Conclusions** and the accompanying notebooks.
 
 **Live:** https://d2718281828nis.github.io/ML-Reservoir_Computing/ · in Russian: https://d2718281828nis.github.io/ML-Reservoir_Computing/ru/
 

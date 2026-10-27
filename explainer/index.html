@@ -39,6 +39,8 @@
       <a href="#fc-lab">forecast</a><a href="#fc-free">free run</a>
       <span class="arrow">→</span>
       <a href="#ng-count">NG-RC</a><a href="#ng-lorenz">Lorenz</a>
+      <span class="arrow">→</span>
+      <a href="#ctl-abcd">control</a>
     </nav>
     <a class="top-link" href="https://github.com/D2718281828nis/ML-Reservoir_Computing" title="Source code and notebooks">GitHub</a>
     <button class="top-link theme-toggle" id="theme-toggle" type="button" title="Switch between light and dark theme" aria-label="Switch between light and dark theme">◐</button>
@@ -65,7 +67,8 @@
     <a href="#s-race"><b><i>5</i>Comparison</b><span>four models, one task, one clock</span></a>
     <a href="#s-fc"><b><i>6</i>Forecasting</b><span>real data, honest baselines, free runs</span></a>
     <a href="#s-ng"><b><i>7</i>NG-RC</b><span>the reservoir replaced by delays and products</span></a>
-    <a href="#s-end"><b><i>8</i>Conclusions</b><span>which one when; the notebooks</span></a>
+    <a href="#s-ctl"><b><i>8</i>Control theory</b><span>the reservoir as an (A, B, C, D) model</span></a>
+    <a href="#s-end"><b><i>9</i>Conclusions</b><span>which one when; the notebooks</span></a>
   </nav>
   <ul class="howto">
     <li><b>Hover</b> charts to read values. Every model on this page is trained in your browser, in plain JavaScript. <code>tools/check.mjs</code> checks that math against numpy.</li>
@@ -476,10 +479,86 @@
   </article>
 </section>
 
-<!-- ───────────────────────── 8. Takeaways ───────────────────────── -->
-<section class="stage" id="s-end">
+<!-- ───────────────────────── 8. Control theory ───────────────────────── -->
+<section class="stage" id="s-ctl">
   <header class="stage-head">
     <span class="stage-num">8</span>
+    <div>
+      <h2>Automatic Control Theory and Reservoir Computing</h2>
+      <p>The state-space model (A, B, C, D) is the basic language of control theory. A trained reservoir turns out to be a model of the same kind:
+        random A and B, trained C and D.</p>
+    </div>
+  </header>
+
+  <article class="step" id="ctl-ss">
+    <h3><span class="step-num">8.1</span> State-Space Models</h3>
+    <p>A linear time-invariant discrete-time system with one input <span class="tex" data-tex="u(t)">u(t)</span> and one output
+      <span class="tex" data-tex="y(t)">y(t)</span> is specified by four matrices <span class="tex" data-tex="(A, B, C, D)">(A, B, C, D)</span>:</p>
+    <div class="formula"><span class="tex" data-tex="x(t) = A\,x(t-1) + B\,u(t), \qquad y(t) = C\,x(t) + D\,u(t)">x(t) = A x(t−1) + B u(t), y(t) = C x(t) + D u(t)</span></div>
+    <p>Here <span class="tex" data-tex="x(t) \in \mathbb{R}^n">x(t) ∈ ℝⁿ</span> is the state vector, <span class="tex" data-tex="A">A</span> the dynamics matrix,
+      <span class="tex" data-tex="B">B</span> the input matrix, <span class="tex" data-tex="C">C</span> the output matrix and <span class="tex" data-tex="D">D</span> the direct feedthrough.
+      We use the same timing as the ESN (the state is updated with <span class="tex" data-tex="u(t)">u(t)</span> before the output is read); it differs from the
+      standard form only by a one-step shift of the state. The input–output map is fully determined by the impulse response (the Markov parameters) and the
+      transfer function:</p>
+    <div class="formula"><span class="tex" data-tex="h(0) = CB + D,\quad h(k) = C A^{k} B \ (k \ge 1), \qquad G(z) = \sum_{k \ge 0} h(k)\, z^{-k} = C\big(I - A z^{-1}\big)^{-1} B + D">h(0) = CB + D, h(k) = C Aᵏ B, G(z) = C (I − A z⁻¹)⁻¹ B + D</span></div>
+    <p>The plant is a second-order system with a pair of complex-conjugate poles <span class="tex" data-tex="z = r e^{\pm i\theta}">z = r·e^{±iθ}</span> in
+      controllable canonical form; <span class="tex" data-tex="C">C</span> is chosen so that the static gain (without <span class="tex" data-tex="D">D</span>) equals 1.
+      The radius <span class="tex" data-tex="r">r</span> sets the damping (closer to 1 is slower), the angle <span class="tex" data-tex="\theta">θ</span> the oscillation frequency in
+      radians per step. The excitation is a random staircase, a standard test signal in system identification.</p>
+    <div class="viz" id="viz-plant"></div>
+  </article>
+
+  <article class="step" id="ctl-ident">
+    <h3><span class="step-num">8.2</span> Experiment: Identifying the Plant with a Reservoir</h3>
+    <p>A reservoir of 50 neurons receives the same input sequence <span class="tex" data-tex="u(t)">u(t)</span>, and its readout is trained to reproduce the plant output
+      <span class="tex" data-tex="y(t)">y(t)</span>. This is a system identification problem: from a record of input and output, build a model that predicts the output for a
+      new input. The bias <span class="tex" data-tex="b">b</span> is zero and the input gain is small, so the neurons operate in the linear range of
+      <span class="tex" data-tex="\tanh">tanh</span>. Training is one ridge solve; λ is chosen on the validation part and the model is scored on the test part.</p>
+    <div class="viz" id="viz-ident"></div>
+    <p>With the default settings the test NRMSE is of order <span class="tex" data-tex="10^{-3}">10⁻³</span> or below. Three observations. First, with α = 1 the error rises
+      to about 0.02: the eigenvalues of <span class="tex" data-tex="A">A</span> fill a disk centred at zero, whereas the poles of a low-pass plant lie near
+      <span class="tex" data-tex="z = 1">z = 1</span>. The leak shifts that disk towards 1 (section 1.3). Second, for a slow plant (r = 0.97, θ = 0.05) the error is about 0.18 at
+      α = 0.5 and about 0.006 at α = 0.2: the eigenvalues of the reservoir must cover the region where the plant's poles lie. Third, with input gain 1 the neurons enter the
+      nonlinear range of <span class="tex" data-tex="\tanh">tanh</span> and the error grows to 0.08: a linear plant is described less well by a nonlinear model.</p>
+  </article>
+
+  <article class="step" id="ctl-abcd">
+    <h3><span class="step-num">8.3</span> The Trained Reservoir as an (A, B, C, D) Model</h3>
+    <p>Linearize the reservoir equation at <span class="tex" data-tex="x = 0">x = 0</span> with <span class="tex" data-tex="b = 0">b = 0</span>, where
+      <span class="tex" data-tex="\tanh'(0) = 1">tanh′(0) = 1</span>:</p>
+    <div class="formula"><span class="tex" data-tex="x(t) = \underbrace{\big[(1-\alpha) I + \alpha W\big]}_{A}\, x(t-1) + \underbrace{\alpha\, W_{\text{in}}}_{B}\, u(t), \qquad \hat y(t) = \underbrace{W_{\text{out}}^{(x)}}_{C}\, x(t) + \underbrace{W_{\text{out}}^{(u)}}_{D}\, u(t) + w_0">x(t) = [(1−α)I + αW] x(t−1) + α W_in u(t), ŷ(t) = W_out(x) x(t) + W_out(u) u(t) + w₀</span></div>
+    <p>The reservoir is therefore a state-space model in which <span class="tex" data-tex="A">A</span> and <span class="tex" data-tex="B">B</span> are drawn at random and fixed,
+      and only <span class="tex" data-tex="C">C</span> and <span class="tex" data-tex="D">D</span> (and the constant <span class="tex" data-tex="w_0">w₀</span>) are trained. The reservoir graph of
+      section 2.3 is the signal-flow graph of <span class="tex" data-tex="A">A</span>: vertices are state variables, edges are its nonzero entries, and the fans from the input and
+      into the output are <span class="tex" data-tex="B">B</span> and <span class="tex" data-tex="C">C</span>. The eigenvalues of <span class="tex" data-tex="A">A</span> equal
+      <span class="tex" data-tex="1 - \alpha + \alpha\,\lambda_i(W)">1 − α + α·λᵢ(W)</span> and lie in a disk with centre 1 − α and radius αρ.</p>
+    <div class="viz" id="viz-abcd"></div>
+    <p>From the standpoint of control theory, several conclusions follow.</p>
+    <ul>
+      <li><b>A non-minimal realization.</b> The reservoir realizes a second-order transfer function with 50 states. The Hankel singular values
+        <span class="tex" data-tex="\sigma_i">σᵢ</span> of the matrix <span class="tex" data-tex="[h(i+j+1)]">[h(i+j+1)]</span> reveal the true order of the map: for the trained
+        reservoir, two significant values are followed by a drop of about three orders of magnitude. Model-order reduction (for example, balanced truncation) would
+        recover a second-order model from it.</li>
+      <li><b>Non-uniqueness of the realization.</b> A similarity transformation <span class="tex" data-tex="x \to Tx">x → Tx</span> leaves <span class="tex" data-tex="G(z)">G(z)</span>
+        unchanged, and in a non-minimal realization <span class="tex" data-tex="C">C</span> and <span class="tex" data-tex="D">D</span> can offset each other. The trained
+        <span class="tex" data-tex="D">D</span> therefore differs from the plant's, while <span class="tex" data-tex="h(0) = CB + D">h(0) = CB + D</span> agrees. The data determine the
+        input–output map, not the matrices.</li>
+      <li><b>Relation to orthonormal basis function models.</b> System identification has long used models whose poles are fixed in advance (Laguerre and Kautz
+        bases) and whose output coefficients are found by least squares. A linear reservoir is a model of the same class with randomly chosen poles, so its accuracy
+        depends on how well the eigenvalues of <span class="tex" data-tex="A">A</span> cover the poles of the plant.</li>
+      <li><b>Stability.</b> The linearized reservoir is asymptotically stable if all eigenvalues of <span class="tex" data-tex="A">A</span> lie inside the unit circle. For a
+        linear reservoir this is exactly the echo state property; for a nonlinear one the condition ρ &lt; 1 is only a rule of thumb (section 4.2).</li>
+      <li><b>Limits of the interpretation.</b> With a large input gain the reservoir is a nonlinear model <span class="tex" data-tex="x(t) = f\big(x(t-1), u(t)\big)">x(t) = f(x(t−1), u(t))</span>,
+        and the (A, B, C, D) reading becomes local: <span class="tex" data-tex="A">A</span> and <span class="tex" data-tex="B">B</span> are the Jacobians of
+        <span class="tex" data-tex="f">f</span> at the operating point. Try input gain 1 in section 8.2: the impulse responses part ways.</li>
+    </ul>
+  </article>
+</section>
+
+<!-- ───────────────────────── 9. Takeaways ───────────────────────── -->
+<section class="stage" id="s-end">
+  <header class="stage-head">
+    <span class="stage-num">9</span>
     <div>
       <h2>Conclusions</h2>
       <p>No family wins everywhere. Each wins where its assumptions hold.</p>
@@ -487,7 +566,7 @@
   </header>
 
   <article class="step" id="end-choose">
-    <h3><span class="step-num">8.1</span> Guidelines for Model Selection</h3>
+    <h3><span class="step-num">9.1</span> Guidelines for Model Selection</h3>
     <div class="viz scroll-x">
       <table class="tbl compare">
         <thead><tr><th></th><th>FFN (backprop)</th><th>ESN (reservoir)</th><th>NG-RC</th></tr></thead>
@@ -505,7 +584,7 @@
   </article>
 
   <article class="step" id="end-notebooks">
-    <h3><span class="step-num">8.2</span> Accompanying Notebooks</h3>
+    <h3><span class="step-num">9.2</span> Accompanying Notebooks</h3>
     <ul class="nb-list">
       <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/00_ffn_vs_reservoir_computing.ipynb" target="_blank" rel="noopener"><b>00 · FFN vs reservoir computing</b></a>: every experiment on this page in numpy, step by step. Start here.</li>
       <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/01_esn_lsm_rnn_sine_generator.ipynb" target="_blank" rel="noopener"><b>01 · ESN, LSM and RNN on a sine generator</b></a>: three models for a frequency-modulated sine.</li>

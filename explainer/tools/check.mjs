@@ -8,6 +8,7 @@ import { mackeyGlass, lorenz } from "../js/data.js";
 import { Reservoir, NGRC, spectralRadius, FFN, eigenvalues, denseW } from "../js/models.js";
 import { flowSetup, explainFFN, explainESN, flowEcho } from "../js/core.js";
 import { ridge, applyReadout, mseGrad } from "../js/nn.js";
+import { plant, simulate, impulse, staircase, identify, hankelSV } from "../js/control.js";
 
 const checks = JSON.parse(readFileSync(new URL("../assets/checks.json", import.meta.url), "utf8"));
 let worst = 0;
@@ -99,6 +100,42 @@ function compare(label, got, want, tol = 1e-6, relative = false) {
   compare("eigenvalues: max |λ| (300 × 300)", [Math.max(...ev.map((e) => Math.hypot(e.re, e.im)))], [c.rho], 1e-10, true);
   compare("eigenvalues: Σλ = trace, Σ Im λ = 0", [ev.reduce((a, e) => a + e.re, 0), ev.reduce((a, e) => a + e.im, 0)], [tr, 0], 1e-9);
   compare("eigenvalues: Σλ² = tr(W²)", [ev.reduce((a, e) => a + e.re * e.re - e.im * e.im, 0)], [tr2], 1e-9);
+}
+
+// part 8: state-space plant and the reservoir read as (A, B, C, D)
+{
+  const sys = plant({ r: 0.9, theta: 0.3, d: 0.2 });
+  const u = staircase(300);
+  const y = simulate(sys, u);
+  const hk = impulse(sys, 299);
+  const conv = Float64Array.from(u, (_, t) => {
+    let a = 0;
+    for (let k = 0; k <= t; k++) a += hk[k] * u[t - k];
+    return a;
+  });
+  compare("state-space output = impulse response * u", y, Array.from(conv), 1e-12);
+  const lam = sys.poles.map((p) => Math.hypot(p.re, p.im));
+  compare("plant poles from A (|λ| = r)", eigenvalues(sys.A).map((e) => Math.hypot(e.re, e.im)), lam, 1e-12);
+  const sv = hankelSV(impulse(sys, 60), 30, eigenvalues);
+  compare("plant Hankel rank 2 (σ₃ ≈ 0)", [sv[2]], [0], 1e-12);
+  // the trained reservoir: a tiny impulse through the real tanh reservoir follows Aᵏ B of the linearization
+  const id = identify(sys);
+  const m = id.model;
+  const eps = 1e-6;
+  const U = new Float64Array(25);
+  U[0] = eps;
+  const X = id.res.run(U, 25);
+  let v = Float64Array.from(m.B);
+  const got = [];
+  const want = [];
+  for (let k = 0; k < 25; k++) {
+    for (let i = 0; i < m.n; i++) (got.push(X[k * m.n + i] / eps), want.push(v[i]));
+    const nv = new Float64Array(m.n);
+    for (let i = 0; i < m.n; i++) for (let j = 0; j < m.n; j++) nv[i] += m.A[i][j] * v[j];
+    v = nv;
+  }
+  compare("reservoir linearization: x(k)/ε = AᵏB", got, want, 1e-9);
+  compare("trained reservoir reproduces the plant's h(k)", impulse(m, 60), Array.from(impulse(sys, 60)), 2e-3);
 }
 
 // backprop of the feed-forward network, against central finite differences
