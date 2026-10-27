@@ -1,11 +1,11 @@
-# Reservoir Computing: a hands-on course
+# Reservoir Computing: A Hands-On Course
 
 Feed-forward neural networks against **reservoir computing** (echo state networks, liquid state machines, next-generation RC) for time-series forecasting:
 an interactive explainer that trains every model in your browser, plus notebooks that build each model step by step.
 
 **Interactive page:** https://d2718281828nis.github.io/ML-Reservoir_Computing/ · на русском: https://d2718281828nis.github.io/ML-Reservoir_Computing/ru/
 
-## The idea in one paragraph
+## Abstract
 
 To forecast a time series with a neural network you can give a **feed-forward network** a window of the last values and train every weight with
 backpropagation. Or you can let the series drive a large **random recurrent network that is never trained** (the *reservoir*) and fit only a linear
@@ -18,7 +18,7 @@ backpropagation. Or you can let the series drive a large **random recurrent netw
 
 The explainer races the corners against each other to test each choice on its own.
 
-## What the explainer measures
+## 1. Experimental Results
 
 All numbers are produced by the page itself (and again, in numpy, by notebook 00):
 
@@ -33,7 +33,7 @@ All numbers are produced by the page itself (and again, in numpy, by notebook 00
 | Closed loop on Mackey–Glass | ESN stays valid ≈ 540–860 steps, FFN ≈ 65–150 |
 | Lorenz-63, 400 training points | NG-RC ≈ 4 Lyapunov times with 84 weights and 1 warm-up point; ESN ≈ 3.5 (it catches up with ≥ 1,000 points) |
 
-## Learning path
+## 2. Curriculum
 
 | # | Notebook | Topic | Colab |
 |---|---|---|---|
@@ -51,7 +51,7 @@ All numbers are produced by the page itself (and again, in numpy, by notebook 00
 Each notebook starts with a short note on what it shows, what it needs, and how to read its results.
 [`notebooks/archive/`](notebooks/archive/) keeps a duplicate of 03 and the Bayesian-readout notebook, which needs packages that are no longer in this repository.
 
-## Repository layout
+## 3. Repository Structure
 
 ```
 explainer/            the interactive page (GitHub Pages): index.html (EN), ru/index.html (RU), js/, css/, assets/, tools/
@@ -60,7 +60,7 @@ dataset/              ECG (1 kHz), Spanish energy market (daily), ACEA electrici
 .github/workflows/    pages.yml publishes explainer/ to GitHub Pages
 ```
 
-## Run it
+## 4. Reproducibility
 
 ```bash
 pip install -r requirements.txt                 # numpy, scipy, pandas, scikit-learn, matplotlib, jupyter
@@ -72,7 +72,7 @@ node explainer/tools/check.mjs                  # checks the page's math against
 
 Some notebooks need extra packages, named in their first cell (torch, tensorflow, plotly, rescompy, reservoir_computing).
 
-## Key terms
+## 5. Terminology
 
 - **Reservoir** — a fixed, random, high-dimensional dynamical system driven by the input; its state is a nonlinear, fading summary of the input history.
 - **Readout** — the only trained part: a linear map from the reservoir state to the output, fitted by ridge regression.
@@ -89,7 +89,7 @@ Some notebooks need extra packages, named in their first cell (torch, tensorflow
 - D. J. Gauthier, E. Bollt, A. Griffith, W. A. S. Barbosa, *Next generation reservoir computing*, Nature Communications 12 (2021).
 - One of the best reservoir-computing repositories: [eloMG/Probabilistic-load-forecasting-with-Reservoir-Computing](https://github.com/eloMG/Probabilistic-load-forecasting-with-Reservoir-Computing).
 
-## Citation
+## How to Cite
 
 The Bayesian-readout notebook and `dataset/data_loaders.py` come from the work below. If you use them in your research, please cite:
 

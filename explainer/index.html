@@ -109,6 +109,11 @@
       different places. In the reservoir, the <i>echo state network</i> (ESN) of Jaeger (2001), <span class="tex" data-tex="W_{\text{in}}">W_in</span> and
       <span class="tex" data-tex="W">W</span> are drawn at random once and frozen. The state <span class="tex" data-tex="x(t)">x(t)</span> becomes a long, nonlinear,
       fading summary of everything the input has done. The readout is a linear regression on that state: a convex problem with one exact solution.</p>
+    <p>Notation in the ESN equation: <span class="tex" data-tex="\alpha \in (0, 1]">α ∈ (0, 1]</span> is the <b>leak rate</b>, the fraction of the new value
+      blended into the state at each step. With α = 1 the state is replaced entirely; with small α it changes slowly and smoothly.
+      <span class="tex" data-tex="\rho">ρ</span> is the <b>spectral radius</b> of <span class="tex" data-tex="W">W</span>, the largest modulus of its eigenvalues.
+      It does not appear in the equation explicitly: after <span class="tex" data-tex="W">W</span> is drawn at random, it is rescaled so that ρ takes the chosen value.
+      The closer ρ is to 1, the longer a disturbance circulates through the recurrent links and the longer the reservoir's memory. Part 4 examines both in detail.</p>
   </article>
 
   <article class="step" id="two-map">
@@ -127,9 +132,10 @@
       <span class="cell dim"><b>RNN, LSTM, GRU</b><span>recurrent, trained through time · not built here; see notebooks 01 and 02</span></span>
       <a class="cell" href="#s-res"><b><span class="key bg-s1"></span>ESN, LSM</b><span>recurrent, random and fixed → readout · part 4</span></a>
     </div>
-    <div class="callout"><p>Keep the two differences apart, because they buy different things. Part 5 races the corners against each other. The <b>ELM</b>
-      (extreme learning machine: a window through a fixed random hidden layer) differs from the FFN only in <i>what is trained</i>, and from the ESN only in
-      <i>where the memory lives</i>. So the race tests each difference on its own.</p></div>
+    <div class="callout"><p>The two distinctions are best treated separately, since they affect different properties of a model. Part 5 compares the models
+      occupying the cells of this table on a common task. The <b>ELM</b> (extreme learning machine: a window of inputs mapped through a fixed random hidden layer)
+      differs from the FFN only in <i>which parameters are trained</i>, and from the ESN only in <i>how memory is represented</i>. The comparison therefore
+      isolates the contribution of each factor.</p></div>
   </article>
 </section>
 
@@ -172,7 +178,10 @@
     <h3><span class="step-num">2.3</span> The reservoir as a graph</h3>
     <p>The same 100 neurons, drawn as what they are: a directed graph. Each neuron listens to 10 others, which makes 1,000 links, with random weights scaled to
       the spectral radius ρ. Hover a neuron to see whom it listens to and who listens to it; click it to follow it in 2.1 and 2.2. The time step, the selected neuron
-      and the ρ, α and λ settings are shared with 2.1.</p>
+      and the ρ, α and λ settings are shared with 2.1. To the left of the graph is the input node <span class="tex" data-tex="u(t)">u(t)</span>, linked to every
+      neuron through the fixed matrix <span class="tex" data-tex="W_{\text{in}}">W_in</span>. To the right is the forecast node
+      <span class="tex" data-tex="\hat y(t+h)">ŷ(t+h)</span>, into which all 100 neurons feed through the trained readout <span class="tex" data-tex="W_{\text{out}}">W_out</span>.
+      The graph itself (the matrix <span class="tex" data-tex="W">W</span>) sits between them, as the reservoir does in the diagram of 2.1.</p>
     <div class="viz" id="viz-graph"></div>
     <p>Choose <b>echo of one change</b> and press <b>Play</b>. Nudging one neuron's state by 0.5 shows how information travels along the links. At k = 0 only that
       neuron differs; one step later, the dozen or so that listen to it; two steps later, about 70 of the 100; and then the difference fades step by step. That

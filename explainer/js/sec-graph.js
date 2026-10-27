@@ -167,8 +167,10 @@ export function initLoop(root, api) {
 const tlabel = (d) => (d === 0 ? "t" : `t${d < 0 ? "−" : "+"}${Math.abs(d)}`);
 
 // ───────────── 2.3 the reservoir as a graph ─────────────
-const GS = 600; // graph viewBox
+const GS = 600; // graph square
 const GM = 28;
+const GX = 92; // room on each side for the input and the output node
+const GW = GS + 2 * GX;
 
 export function initGraph(root, api) {
   const flow = api.flow;
@@ -176,14 +178,14 @@ export function initGraph(root, api) {
   const { N, deg, idx } = res;
   const isVisible = visibility(root);
   const P = graphLayout(res);
-  const gx = (i) => GM + P[2 * i] * (GS - 2 * GM);
+  const gx = (i) => GX + GM + P[2 * i] * (GS - 2 * GM);
   const gy = (i) => GM + P[2 * i + 1] * (GS - 2 * GM);
   const outs = Array.from({ length: N }, () => []);
   for (let i = 0; i < N; i++) for (let k = 0; k < deg; k++) outs[idx[i * deg + k]].push(i);
   const st = { mode: "state", source: "neuron", k: 3, hover: null, echo: null, playing: false };
 
   // ── the graph ──
-  const svg = s("svg", { class: "graphviz", viewBox: `0 0 ${GS} ${GS}`, role: "img", "aria-label": T.graphAria });
+  const svg = s("svg", { class: "graphviz", viewBox: `0 0 ${GW} ${GS}`, role: "img", "aria-label": T.graphAria });
   svg.append(s("defs", null,
     s("marker", { id: "arrow3", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, markerUnits: "userSpaceOnUse", orient: "auto" }, s("path", { d: "M0,0 L10,5 L0,10 z", class: "arrow-head-ink" }))));
   const edgeLayer = s("g", { class: "g-edges" });
@@ -203,8 +205,22 @@ export function initGraph(root, api) {
     return c;
   });
   const selRing = s("circle", { class: "g-sel", r: 11 });
-  const inputBadge = s("g", { class: "g-input" }, s("circle", { cx: 22, cy: 22, r: 14 }), s("text", { x: 22, y: 26, "text-anchor": "middle" }, "u"));
-  svg.append(edgeLayer, overlay, nodeLayer, selRing, inputBadge);
+  // the way in and the way out: u(t) reaches every neuron through the fixed W_in, the trained W_out reads every neuron into ŷ(t+h)
+  const UX = 40;
+  const YX = GW - 40;
+  const IOY = GS / 2;
+  const inFan = Array.from({ length: N }, (_, i) => s("line", { x1: UX, y1: IOY, x2: gx(i), y2: gy(i) }));
+  const outFan = Array.from({ length: N }, (_, i) => s("line", { x1: gx(i), y1: gy(i), x2: YX, y2: IOY }));
+  const ioLayer = s("g", { class: "g-io" }, ...inFan, ...outFan);
+  const uVal = s("text", { class: "g-io-val", x: UX, y: IOY + 40, "text-anchor": "middle" });
+  const yVal = s("text", { class: "g-io-val", x: YX, y: IOY + 40, "text-anchor": "middle" });
+  const inputBadge = s("g", { class: "g-input" },
+    s("circle", { cx: UX, cy: IOY, r: 22 }), s("text", { x: UX, y: IOY + 5, "text-anchor": "middle" }, "u(t)"),
+    s("text", { class: "g-io-cap", x: UX, y: IOY - 32, "text-anchor": "middle" }, T.graphIn), uVal);
+  const outputBadge = s("g", { class: "g-output" },
+    s("circle", { cx: YX, cy: IOY, r: 22 }), s("text", { x: YX, y: IOY + 5, "text-anchor": "middle" }, "ŷ"),
+    s("text", { class: "g-io-cap", x: YX, y: IOY - 32, "text-anchor": "middle" }, T.graphOut), yVal);
+  svg.append(ioLayer, edgeLayer, overlay, nodeLayer, selRing, inputBadge, outputBadge);
 
   // ── controls and side panel ──
   const modeCtl = ctl(T.colorBy, segToggle([["state", T.modeState], ["readout", T.modeReadout], ["echo", T.modeEcho]].map(([value, label]) => ({ value, label })), st.mode, (v) => {
@@ -276,13 +292,39 @@ export function initGraph(root, api) {
     return { v: x, scale: 1, prev, prevScale: 1 };
   }
 
+  // what passes along the input and output links at this step: W_in·u(t) into each neuron, W_out·x(t) out of it
+  function ioTerms() {
+    const t = api.t;
+    const u = flow.T.z[t];
+    const x = flow.X.subarray(t * N, (t + 1) * N);
+    const inT = Float64Array.from(res.win, (wi) => wi * u);
+    const outT = Float64Array.from(x, (xi, i) => flow.B[2 + i] * xi);
+    let y = 0;
+    for (let q = 0; q < flow.p; q++) y += flow.F[t * flow.p + q] * flow.B[q];
+    return { u, y, inT, outT };
+  }
+
   function refresh() {
     const { v, scale } = values();
     nodes.forEach((c, i) => c.setAttribute("fill", rgbCss(diverging(v[i], scale))));
     const sel = api.neuron;
     selRing.setAttribute("cx", gx(sel));
     selRing.setAttribute("cy", gy(sel));
-    inputBadge.classList.toggle("lit", st.mode === "echo" && st.source === "input" && st.k === 0);
+    const inLit = st.mode === "echo" && st.source === "input" && st.k === 0;
+    inputBadge.classList.toggle("lit", inLit);
+    const io = ioTerms();
+    const inLim = Math.max(1e-12, ...Array.from(io.inT, Math.abs));
+    const outLim = robustScale(io.outT, 0.95);
+    inFan.forEach((l, i) => {
+      l.setAttribute("stroke", rgbCss(diverging(io.inT[i], inLim)));
+      l.setAttribute("stroke-opacity", inLit ? 0.7 : 0.22);
+    });
+    outFan.forEach((l, i) => {
+      l.setAttribute("stroke", rgbCss(diverging(io.outT[i], outLim)));
+      l.setAttribute("stroke-opacity", st.mode === "readout" ? 0.25 + 0.6 * Math.min(1, Math.abs(io.outT[i]) / outLim) : 0.22);
+    });
+    uVal.textContent = `= ${fmt(io.u, 2)}`;
+    yVal.textContent = `= ${fmt(io.y, 2)}`;
     drawOverlay();
     drawSide();
   }
@@ -315,6 +357,20 @@ export function initGraph(root, api) {
     }
     if (focus != null) {
       for (const tgt of outs[focus]) overlay.append(s("line", { class: "g-out", x1: gx(focus), y1: gy(focus), x2: gx(tgt), y2: gy(tgt) }));
+      // the focused neuron's own way in (W_in) and way out (W_out)
+      const io = ioTerms();
+      const dx = gx(focus) - UX;
+      const dy = gy(focus) - IOY;
+      const d = Math.hypot(dx, dy) || 1;
+      overlay.append(
+        s("line", { class: "g-io-hl", x1: UX + (dx / d) * 22, y1: IOY + (dy / d) * 22, x2: gx(focus) - (dx / d) * 9, y2: gy(focus) - (dy / d) * 9, stroke: rgbCss(diverging(io.inT[focus], Math.max(1e-12, Math.abs(io.inT[focus])))), "marker-end": "url(#arrow3)" }),
+      );
+      const ex = YX - gx(focus);
+      const ey = IOY - gy(focus);
+      const e = Math.hypot(ex, ey) || 1;
+      overlay.append(
+        s("line", { class: "g-io-hl", x1: gx(focus) + (ex / e) * 9, y1: gy(focus) + (ey / e) * 9, x2: YX - (ex / e) * 24, y2: IOY - (ey / e) * 24, stroke: rgbCss(diverging(io.outT[focus], Math.max(1e-12, Math.abs(io.outT[focus])))), "marker-end": "url(#arrow3)" }),
+      );
     }
   }
 
@@ -322,6 +378,7 @@ export function initGraph(root, api) {
     const t = api.t;
     const x = flow.X[t * N + i];
     const parts = [`<b>${T.neuron} ${i + 1}</b>`, `<span class="mono">x${sub(i + 1)}(t) = ${fmt(x, 3)}</span>`,
+      `<span class="mono">W_in·u = ${fmt(res.win[i] * flow.T.z[t], 3)}</span>`,
       `<span class="mono">W_out·x = ${fmt(flow.B[2 + i] * x, 2)}</span>`, T.listensTo(deg, outs[i].length)];
     if (st.mode === "echo") parts.splice(2, 0, `<span class="mono">Δx = ${st.echo.dX[st.k * N + i].toExponential(1)}</span>`);
     showTip(parts.join("<br>"), ev);
@@ -332,6 +389,7 @@ export function initGraph(root, api) {
     legend.replaceChildren(
       h("p", { class: "panel-title" }, T.graphLegendTitle),
       h("p", { class: "sub" }, m === "state" ? T.legendState : m === "readout" ? T.legendReadout : T.legendEcho),
+      h("p", { class: "sub" }, T.legendIO),
     );
     const outDeg = outs.map((o) => o.length);
     facts.innerHTML = T.graphFacts(N, N * deg, deg, Math.min(...outDeg), Math.max(...outDeg), fmt(res.rho, 2), api.neuron + 1);
