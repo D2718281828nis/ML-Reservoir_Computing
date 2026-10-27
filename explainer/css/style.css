@@ -466,3 +466,15 @@ select { max-width: 100%; }
 }
 table.tbl td.text, table.tbl th.text { text-align: left; font-family: var(--font); white-space: normal; }
 .progress[hidden] { display: none; }
+
+/* 1.3 the two numbers: the eigenvalue plane */
+.eig-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.eig-plane { flex: 0 0 240px; max-width: 100%; }
+.eig-plane .sub { font-size: 12.5px; margin-top: 4px; }
+svg.eigviz { display: block; width: 100%; height: auto; background: var(--surface-2); border-radius: 10px; }
+.eigviz .axis { stroke: var(--line-strong); stroke-width: .8; }
+.eigviz .unit { fill: none; stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 4 4; }
+.eigviz .rho { fill: var(--accent-soft); fill-opacity: .45; stroke: var(--accent); stroke-width: 1.8; }
+.eigviz .ev { fill: var(--s1); stroke: var(--surface); stroke-width: .8; cursor: default; }
+.eigviz .lbl { font: 11px var(--font); fill: var(--muted); }
+.panel-title .greek { text-transform: none; }

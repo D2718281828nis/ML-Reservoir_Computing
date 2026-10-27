@@ -7,6 +7,7 @@ import { initLoop, initGraph } from "./sec-graph.js";
 import { initFFN } from "./sec-ffn.js";
 import { initInside, initMemory } from "./sec-reservoir.js";
 import { initRace } from "./sec-race.js";
+import { initKnobs } from "./sec-knobs.js";
 import { initLab, initFree } from "./sec-forecast.js";
 import { initCount, initLorenz } from "./sec-ngrc.js";
 
@@ -26,6 +27,7 @@ async function main() {
       fail([id], e);
     }
   };
+  boot("viz-knobs", initKnobs);
   boot("viz-flow", initFlow);
   const flowApi = sections.at(-1)?.api;
   if (flowApi) {

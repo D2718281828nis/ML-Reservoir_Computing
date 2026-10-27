@@ -5,7 +5,7 @@
 
 import { readFileSync } from "node:fs";
 import { mackeyGlass, lorenz } from "../js/data.js";
-import { Reservoir, NGRC, spectralRadius, FFN } from "../js/models.js";
+import { Reservoir, NGRC, spectralRadius, FFN, eigenvalues, denseW } from "../js/models.js";
 import { flowSetup, explainFFN, explainESN, flowEcho } from "../js/core.js";
 import { ridge, applyReadout, mseGrad } from "../js/nn.js";
 
@@ -83,6 +83,22 @@ function compare(label, got, want, tol = 1e-6, relative = false) {
   const c = checks.spectral;
   const est = spectralRadius(Int32Array.from(c.idx), Float64Array.from(c.w), c.N, c.deg);
   compare("spectral radius estimate (300 × 300)", [est], [c.rho], 0.01, true);
+}
+
+// all eigenvalues (Hessenberg + QR, used in 1.3): the largest |λ| against numpy, Σλ against the trace, Σλ² against tr(W²)
+{
+  const c = checks.spectral;
+  const M = denseW(c.idx, c.w, c.N, c.deg);
+  const ev = eigenvalues(M);
+  let tr = 0;
+  let tr2 = 0;
+  for (let i = 0; i < c.N; i++) {
+    tr += M[i][i];
+    for (let j = 0; j < c.N; j++) tr2 += M[i][j] * M[j][i];
+  }
+  compare("eigenvalues: max |λ| (300 × 300)", [Math.max(...ev.map((e) => Math.hypot(e.re, e.im)))], [c.rho], 1e-10, true);
+  compare("eigenvalues: Σλ = trace, Σ Im λ = 0", [ev.reduce((a, e) => a + e.re, 0), ev.reduce((a, e) => a + e.im, 0)], [tr, 0], 1e-9);
+  compare("eigenvalues: Σλ² = tr(W²)", [ev.reduce((a, e) => a + e.re * e.re - e.im * e.im, 0)], [tr2], 1e-9);
 }
 
 // backprop of the feed-forward network, against central finite differences

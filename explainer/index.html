@@ -113,7 +113,7 @@
       blended into the state at each step. With α = 1 the state is replaced entirely; with small α it changes slowly and smoothly.
       <span class="tex" data-tex="\rho">ρ</span> is the <b>spectral radius</b> of <span class="tex" data-tex="W">W</span>, the largest modulus of its eigenvalues.
       It does not appear in the equation explicitly: after <span class="tex" data-tex="W">W</span> is drawn at random, it is rescaled so that ρ takes the chosen value.
-      The closer ρ is to 1, the longer a disturbance circulates through the recurrent links and the longer the reservoir's memory. Part 4 examines both in detail.</p>
+      The closer ρ is to 1, the longer a disturbance circulates through the recurrent links and the longer the reservoir's memory. Section 1.3 illustrates both; part 4 examines their effect on memory and stability.</p>
   </article>
 
   <article class="step" id="two-map">
@@ -136,6 +136,29 @@
       occupying the cells of this table on a common task. The <b>ELM</b> (extreme learning machine: a window of inputs mapped through a fixed random hidden layer)
       differs from the FFN only in <i>which parameters are trained</i>, and from the ESN only in <i>how memory is represented</i>. The comparison therefore
       isolates the contribution of each factor.</p></div>
+  </article>
+
+  <article class="step" id="two-knobs">
+    <h3><span class="step-num">1.3</span> Reservoir Hyperparameters: The Leak Rate α and the Spectral Radius ρ</h3>
+    <p>Two numbers that are set in advance, not trained, govern the dynamics of an ESN.</p>
+    <ul>
+      <li>The <b>leak rate</b> <span class="tex" data-tex="\alpha \in (0, 1]">α ∈ (0, 1]</span> is the fraction of the new value blended into the state at each step.
+        With α = 1 the state is replaced entirely; with small α it changes slowly and smoothly, and each neuron acts as a low-pass filter with time constant
+        <span class="tex" data-tex="\tau = -1/\ln(1-\alpha) \approx 1/\alpha">τ = −1/ln(1−α) ≈ 1/α</span> steps.</li>
+      <li>The <b>spectral radius</b> <span class="tex" data-tex="\rho(W) = \max_i |\lambda_i(W)|">ρ(W) = max |λᵢ(W)|</span> is the largest modulus of the eigenvalues
+        of <span class="tex" data-tex="W">W</span>. It does not appear in the state equation explicitly: after the matrix <span class="tex" data-tex="W_0">W₀</span>
+        is drawn at random, it is rescaled so that ρ takes the chosen value. Eigenvalues scale linearly with the matrix, so after multiplication by ρ/ρ₀
+        the largest modulus is exactly ρ.</li>
+    </ul>
+    <div class="formula"><span class="tex" data-tex="x(t) = (1-\alpha)\,x(t-1) + \alpha\, d(t)">x(t) = (1−α) x(t−1) + α d(t)</span></div>
+    <div class="formula"><span class="tex" data-tex="W = \frac{\rho}{\rho_0}\, W_0, \qquad \rho_0 = \max_i \big|\lambda_i(W_0)\big|">W = (ρ/ρ₀) W₀, ρ₀ = max |λ(W₀)|</span></div>
+    <div class="viz" id="viz-knobs"></div>
+    <p>The left panel isolates the leak: a given signal <span class="tex" data-tex="d(t)">d(t)</span> with level jumps and noise replaces
+      <span class="tex" data-tex="\tanh(\cdot)">tanh(·)</span> in the equation. With α = 1 the state follows the signal, noise included; with α ≈ 0.1 the noise is
+      smoothed out, but the state lags the jumps by about 10 steps. The right panel shows the eigenvalues of one random matrix for 100 neurons. The ρ slider
+      stretches or shrinks the whole cloud without changing its shape. The chart beside the plane is the size of a disturbance carried by the recurrent links
+      alone, without the nonlinearity or the input. Its slope on the log scale tends to <span class="tex" data-tex="\log \rho">log ρ</span>, so ρ sets how fast
+      the reservoir forgets the past: the closer ρ is to 1, the longer the memory (part 4.3).</p>
   </article>
 </section>
 

@@ -33,6 +33,165 @@ export function spectralRadius(idx, w, N, deg, iters = 1000, burn = 200) {
   return Math.exp(acc / (iters - burn));
 }
 
+// All eigenvalues of a dense real n × n matrix (rows: arrays), as { re, im }. Reduction to Hessenberg form by
+// elimination, then the Francis double-shift QR algorithm (elmhes and hqr of Numerical Recipes, 2nd ed., §11.5–11.6).
+// The input is copied; complex eigenvalues come in conjugate pairs.
+export function eigenvalues(M) {
+  const n = M.length;
+  const EPS = 2.220446049250313e-16;
+  const a = [new Float64Array(n + 1), ...M.map((row) => Float64Array.from([0, ...row]))]; // 1-based, as in the book
+  for (let m = 2; m < n; m++) {
+    let x = 0;
+    let i = m;
+    for (let j = m; j <= n; j++) if (Math.abs(a[j][m - 1]) > Math.abs(x)) ((x = a[j][m - 1]), (i = j));
+    if (i !== m) {
+      for (let j = m - 1; j <= n; j++) [a[i][j], a[m][j]] = [a[m][j], a[i][j]];
+      for (let j = 1; j <= n; j++) [a[j][i], a[j][m]] = [a[j][m], a[j][i]];
+    }
+    if (x) {
+      for (i = m + 1; i <= n; i++) {
+        let y = a[i][m - 1];
+        if (y) {
+          y /= x;
+          a[i][m - 1] = y;
+          for (let j = m; j <= n; j++) a[i][j] -= y * a[m][j];
+          for (let j = 1; j <= n; j++) a[j][m] += y * a[j][i];
+        }
+      }
+    }
+  }
+  for (let i = 3; i <= n; i++) for (let j = 1; j < i - 1; j++) a[i][j] = 0;
+
+  const wr = new Float64Array(n + 1);
+  const wi = new Float64Array(n + 1);
+  const sign = (v, ref) => (ref >= 0 ? Math.abs(v) : -Math.abs(v));
+  let anorm = 0;
+  for (let i = 1; i <= n; i++) for (let j = Math.max(i - 1, 1); j <= n; j++) anorm += Math.abs(a[i][j]);
+  let nn = n;
+  let t = 0;
+  let p = 0, q = 0, r = 0, s = 0, w = 0, x = 0, y = 0, z = 0;
+  while (nn >= 1) {
+    let its = 0;
+    let l;
+    do {
+      for (l = nn; l >= 2; l--) {
+        s = Math.abs(a[l - 1][l - 1]) + Math.abs(a[l][l]);
+        if (s === 0) s = anorm;
+        if (Math.abs(a[l][l - 1]) <= EPS * s) {
+          a[l][l - 1] = 0;
+          break;
+        }
+      }
+      x = a[nn][nn];
+      if (l === nn) {
+        wr[nn] = x + t;
+        wi[nn--] = 0;
+      } else {
+        y = a[nn - 1][nn - 1];
+        w = a[nn][nn - 1] * a[nn - 1][nn];
+        if (l === nn - 1) {
+          p = 0.5 * (y - x);
+          q = p * p + w;
+          z = Math.sqrt(Math.abs(q));
+          x += t;
+          if (q >= 0) {
+            z = p + sign(z, p);
+            wr[nn - 1] = wr[nn] = x + z;
+            if (z) wr[nn] = x - w / z;
+            wi[nn - 1] = wi[nn] = 0;
+          } else {
+            wr[nn - 1] = wr[nn] = x + p;
+            wi[nn] = z;
+            wi[nn - 1] = -z;
+          }
+          nn -= 2;
+        } else {
+          if (its === 60) throw new Error("eigenvalues: no convergence");
+          if (its === 10 || its === 20) {
+            t += x;
+            for (let i = 1; i <= nn; i++) a[i][i] -= x;
+            s = Math.abs(a[nn][nn - 1]) + Math.abs(a[nn - 1][nn - 2]);
+            y = x = 0.75 * s;
+            w = -0.4375 * s * s;
+          }
+          ++its;
+          let m;
+          for (m = nn - 2; m >= l; m--) {
+            z = a[m][m];
+            r = x - z;
+            s = y - z;
+            p = (r * s - w) / a[m + 1][m] + a[m][m + 1];
+            q = a[m + 1][m + 1] - z - r - s;
+            r = a[m + 2][m + 1];
+            s = Math.abs(p) + Math.abs(q) + Math.abs(r);
+            p /= s;
+            q /= s;
+            r /= s;
+            if (m === l) break;
+            const u = Math.abs(a[m][m - 1]) * (Math.abs(q) + Math.abs(r));
+            const v = Math.abs(p) * (Math.abs(a[m - 1][m - 1]) + Math.abs(z) + Math.abs(a[m + 1][m + 1]));
+            if (u <= EPS * v) break;
+          }
+          for (let i = m + 2; i <= nn; i++) {
+            a[i][i - 2] = 0;
+            if (i !== m + 2) a[i][i - 3] = 0;
+          }
+          for (let k = m; k <= nn - 1; k++) {
+            if (k !== m) {
+              p = a[k][k - 1];
+              q = a[k + 1][k - 1];
+              r = k !== nn - 1 ? a[k + 2][k - 1] : 0;
+              if ((x = Math.abs(p) + Math.abs(q) + Math.abs(r)) !== 0) {
+                p /= x;
+                q /= x;
+                r /= x;
+              }
+            }
+            if ((s = sign(Math.sqrt(p * p + q * q + r * r), p)) !== 0) {
+              if (k === m) {
+                if (l !== m) a[k][k - 1] = -a[k][k - 1];
+              } else a[k][k - 1] = -s * x;
+              p += s;
+              x = p / s;
+              y = q / s;
+              z = r / s;
+              q /= p;
+              r /= p;
+              for (let j = k; j <= nn; j++) {
+                p = a[k][j] + q * a[k + 1][j];
+                if (k !== nn - 1) {
+                  p += r * a[k + 2][j];
+                  a[k + 2][j] -= p * z;
+                }
+                a[k + 1][j] -= p * y;
+                a[k][j] -= p * x;
+              }
+              const mmin = nn < k + 3 ? nn : k + 3;
+              for (let i = l; i <= mmin; i++) {
+                p = x * a[i][k] + y * a[i][k + 1];
+                if (k !== nn - 1) {
+                  p += z * a[i][k + 2];
+                  a[i][k + 2] -= p * r;
+                }
+                a[i][k + 1] -= p * q;
+                a[i][k] -= p;
+              }
+            }
+          }
+        }
+      }
+    } while (l < nn - 1);
+  }
+  return Array.from({ length: n }, (_, i) => ({ re: wr[i + 1], im: wi[i + 1] }));
+}
+
+// The sparse reservoir matrix as dense rows.
+export function denseW(idx, w, N, deg) {
+  const M = Array.from({ length: N }, () => new Float64Array(N));
+  for (let i = 0; i < N; i++) for (let k = 0; k < deg; k++) M[i][idx[i * deg + k]] += w[i * deg + k];
+  return M;
+}
+
 export class Reservoir {
   // Every neuron listens to `degree` random others. The random draws are made once; configure() only rescales them,
   // so moving a slider changes ρ or the input gain of the *same* reservoir.
