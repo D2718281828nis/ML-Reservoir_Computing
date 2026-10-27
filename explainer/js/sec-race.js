@@ -87,42 +87,61 @@ export function initRace(root) {
 
   function draw() {
     const W = widthOf(root);
+    // log time axis: a one-solve fit at 2 ms, 0.1 s and an FFN at 10 s all stay readable on any device
+    const lt = (ms_) => Math.log10(Math.max(ms_ / 1000, 1e-3));
     const series = [];
     const points = [];
-    const hlines = [];
-    let tMax = 1.5;
+    const endLabels = [];
+    let tMax = 2;
     let lo = Infinity;
     let hi = -Infinity;
-    const note1 = (v) => {
-      lo = Math.min(lo, v);
-      hi = Math.max(hi, v);
-    };
+    const seen = (v) => ((lo = Math.min(lo, v)), (hi = Math.max(hi, v)));
+    for (const run of runs) {
+      const hist = run.trainer.history;
+      if (hist.length) tMax = Math.max(tMax, hist.at(-1).time / 1000);
+      for (const m of MODELS.slice(0, 3)) tMax = Math.max(tMax, run[m.key].time / 1000);
+    }
+    const x0 = -3;
+    const x1 = Math.ceil(Math.log10(tMax * 1.15) * 2) / 2;
     runs.forEach((run, i) => {
       const latest = i === runs.length - 1;
       const hist = run.trainer.history;
       if (hist.length) {
-        tMax = Math.max(tMax, hist.at(-1).time / 1000);
         series.push({
-          xs: hist.map((e) => e.time / 1000), ys: hist.map((e) => log10(e.test)), cls: "s2", label: `${T.ffn} · ${T.seed} ${run.seed}`,
+          xs: hist.map((e) => lt(e.time)), ys: hist.map((e) => log10(e.test)), cls: "s2", label: `${T.ffn} · ${T.seed} ${run.seed}`,
           thin: !latest, opacity: latest ? 1 : 0.45, noTip: !latest,
         });
-        hist.forEach((e) => note1(log10(e.test)));
+        hist.forEach((e) => seen(log10(e.test)));
+        // once trained, the FFN is scored at its best validation epoch: mark that point, and label it like the table
+        const best = run.ffn ? hist.find((e) => e.epoch === run.ffn.bestEpoch) : null;
+        if (best && latest) points.push({ x: lt(best.time), y: log10(run.ffn.err), cls: "s2", r: 6, tip: `<b>${T.ffn}</b> · ${T.bestEpoch} (${best.epoch})<br>${T.testNrmse} <span class="mono">${fmt(run.ffn.err, 5)}</span>` });
+        if (latest) {
+          const e = best ? run.ffn.err : hist.at(-1).test;
+          endLabels.push({ y: log10(e), text: `${T.ffn} ${fmt(e, 4)}`, cls: "s2" });
+        }
       }
       for (const m of MODELS.slice(0, 3)) {
         const r = run[m.key];
+        const x = lt(r.time);
         const y = log10(r.err);
-        note1(y);
-        points.push({ x: r.time / 1000, y, cls: m.cls, r: latest ? 5 : 3.5, tip: `<b>${T[m.key]}</b> · ${T.seed} ${run.seed}<br>${T.testNrmse} <span class="mono">${fmt(r.err, 5)}</span><br>${T.fitTime} <span class="mono">${ms(r.time)}</span>` });
-        if (latest) hlines.push({ y }); // a dashed guide: where the FFN has to get to
+        seen(y);
+        points.push({ x, y, cls: m.cls, r: latest ? 6 : 4, tip: `<b>${T[m.key]}</b> · ${T.seed} ${run.seed}<br>${T.testNrmse} <span class="mono">${fmt(r.err, 5)}</span><br>${T.fitTime} <span class="mono">${ms(r.time)}</span>` });
+        if (latest) {
+          // a guide from the moment the fit finished to the right edge: the error the FFN has to reach
+          series.push({ xs: [x, x1], ys: [y, y], cls: m.cls, dash: true, thin: true, noTip: true });
+          endLabels.push({ y, text: `${T[m.key]} ${fmt(r.err, 4)}`, cls: m.cls });
+        }
       }
     });
     const y0 = Number.isFinite(lo) ? Math.floor(lo - 0.15) : -4;
     const y1 = Number.isFinite(hi) ? Math.max(Math.ceil(hi + 0.05), y0 + 2) : 0;
     const ticks = [];
     for (let e = y0; e <= y1; e++) ticks.push(e);
+    const xTicks = [-3, -2, -1, 0, 1, 2].filter((v) => v <= x1 + 1e-9);
     chartBox.replaceChildren(lineChart({
-      width: W, height: 270, series, points, hlines, x0: 0, x1: Math.ceil(tMax * 2) / 2, y0, y1, yTicks: ticks, yFmt: powFmt,
-      xFmt: (v) => `${fmt(v, 1)} s`, xLabel: T.wallClock, tipFmt: (v) => fmt(10 ** v, 4), tipTitle: (x) => `${fmt(x, 2)} s`,
+      width: W, height: 280, series, points, endLabels, x0, x1, y0, y1, yTicks: ticks, yFmt: powFmt, xTicks,
+      xFmt: (v) => timeLabel(v), xLabel: T.wallClockLog, tipFmt: (v) => fmt(10 ** v, 4), tipTitle: (x) => ms(10 ** x * 1000),
+      margin: { l: 42, r: 132, t: 8, b: 34 },
     }));
     if (!runs.length) chartBox.append(h("p", { class: "sub" }, T.raceHint));
 
@@ -148,6 +167,8 @@ export function initRace(root) {
   draw();
   return { redraw: draw };
 }
+
+const timeLabel = (e) => ms(10 ** Math.round(e) * 1000);
 
 function median(a) {
   const s = [...a].sort((x, y) => x - y);

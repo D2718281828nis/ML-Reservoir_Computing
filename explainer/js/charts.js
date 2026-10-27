@@ -36,9 +36,10 @@ const pathOf = (xs, ys, X, Y) => {
  * series: [{ xs, ys, cls: "s1"…"s4"|"ink"|"past"|"muted", label, thin, dash, dot, opacity, noTip }]
  * bands:  [{ xs, lo, hi, color, opacity }]
  * marks:  [{ x, cls, label }] vertical rules;  hlines: [{ y, label, cls }];  points: [{ x, y, cls, r, tip }] markers
+ * endLabels: [{ y, text, cls }] direct labels in the right margin, spread apart so they never overlap (set margin.r for room)
  */
 export function lineChart({
-  width, height = 220, series = [], bands = [], marks = [], hlines = [], points = [], x0, x1, y0, y1, xTicks, yTicks,
+  width, height = 220, series = [], bands = [], marks = [], hlines = [], points = [], endLabels = [], x0, x1, y0, y1, xTicks, yTicks,
   xFmt = (v) => fmt(v, 0), yFmt = (v) => fmt(v, 1), xLabel = "", hover = true, tipFmt = (v) => fmt(v, 3), tipTitle,
   margin = { l: 42, r: 12, t: 8, b: xLabel ? 34 : 22 },
 }) {
@@ -139,6 +140,15 @@ export function lineChart({
       c.addEventListener("pointerleave", hideTip);
     }
     svg.append(c);
+  }
+  // direct labels: sorted by height, pushed apart to at least 13 px, kept inside the plot; the text wears ink, a key carries the color
+  const labs = endLabels.map((l) => ({ ...l, py: clamp(Y(l.y), m.t + 6, H - m.b - 2) })).sort((a, b) => a.py - b.py);
+  for (let i = 1; i < labs.length; i++) labs[i].py = Math.max(labs[i].py, labs[i - 1].py + 13);
+  const over = labs.length ? labs.at(-1).py - (H - m.b - 2) : 0;
+  if (over > 0) for (const l of labs) l.py -= over;
+  for (const l of labs) {
+    svg.append(s("rect", { x: W - m.r + 6, y: l.py - 4.5, width: 9, height: 3, rx: 1.5, fill: `var(--${l.cls || "s1"})` }));
+    svg.append(s("text", { class: "lbl", x: W - m.r + 19, y: l.py }, l.text));
   }
   svg.scales = { X, Y, x0, x1, y0, y1 };
   svg.paths = paths;
