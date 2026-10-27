@@ -1,0 +1,14 @@
+# core: notebook 00, explainer/tools/build_assets.py and most notebooks
+numpy
+scipy
+pandas
+scikit-learn
+matplotlib
+jupyter
+# optional, per notebook (see each notebook's first cell)
+# torch               01, 06
+# tensorflow          02
+# tabulate            04
+# plotly              09
+# rescompy            05   (pip install git+https://github.com/PotomacResearch/rescompy)
+# reservoir_computing 07
