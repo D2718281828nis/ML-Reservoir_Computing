@@ -27,6 +27,30 @@ export function initFlow(root) {
   const flow = flowSetup();
   let ffn = null;
   let esn = null;
+  // 2.2 and 2.3 follow this view: same time, same selected neuron, same reservoir settings
+  const listeners = new Set();
+  const notify = (animate, dt) => {
+    for (const fn of listeners) fn({ animate, dt });
+  };
+  const api = {
+    flow,
+    get t() {
+      return st.t;
+    },
+    get neuron() {
+      return st.neuron ?? 70;
+    },
+    get lambda() {
+      return st.lambda;
+    },
+    go: (t, animate = true) => go(t, animate),
+    select: (i) => {
+      st.open = "neuron";
+      st.neuron = i;
+      draw(false, 0);
+    },
+    subscribe: (fn) => listeners.add(fn),
+  };
 
   // ── controls ──
   const back = h("button", { class: "btn", type: "button", "aria-label": T.stepBack }, "◀");
@@ -44,7 +68,7 @@ export function initFlow(root) {
   const exCtl = ctl(T.examples, segToggle(examples.map((e) => ({ value: e.t, label: T[e.key] })), null, (v) => go(v, true), T.examples));
   const refit = perFrame(() => {
     refitFlowESN(flow, { ...FLOW.esn, rho: st.rho, leak: st.leak }, st.lambda);
-    draw();
+    draw(false, 0);
   });
   const rhoCtl = slider(T.rhoLabel, { min: 0.1, max: 1.5, step: 0.05, value: st.rho, format: (v) => fmt(v, 2), onInput: (v) => ((st.rho = v), refit()) });
   const leakCtl = slider(T.leakLabel, { min: 0.05, max: 1, step: 0.05, value: st.leak, format: (v) => fmt(v, 2), onInput: (v) => ((st.leak = v), refit()) });
@@ -83,9 +107,10 @@ export function initFlow(root) {
   };
 
   function go(t, animate) {
+    const before = st.t;
     st.t = Math.max(t0, Math.min(t1, t));
     tCtl.set(st.t);
-    draw(animate);
+    draw(animate, st.t - before);
   }
   function startPlay() {
     st.playing = true;
@@ -142,9 +167,10 @@ export function initFlow(root) {
   }
 
   // ── drawing ──
-  function draw(animate = false) {
+  function draw(animate = false, dt = 0) {
     if (!st.ready) {
       svgBox.replaceChildren(h("div", { class: "placeholder" }, h("span", { class: "spinner" }), T.flowTraining(flow.trainer.epochs, FLOW.epochs)));
+      notify(animate, dt);
       return;
     }
     ffn = explainFFN(flow, st.t);
@@ -158,6 +184,7 @@ export function initFlow(root) {
     status.innerHTML = T.flowStatus(st.t, MG.H, ffn.y, esn.y, truth, flow.ffnErr, flow.esnErr);
     drawPanel();
     drawChart();
+    notify(animate, dt);
   }
 
   function buildSVG(animate) {
@@ -478,7 +505,7 @@ export function initFlow(root) {
 
   draw();
   requestAnimationFrame(trainStep);
-  return { redraw: () => draw() };
+  return { redraw: () => draw(), api };
 }
 
 // ── helpers ──

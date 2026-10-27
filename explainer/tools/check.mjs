@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { mackeyGlass, lorenz } from "../js/data.js";
 import { Reservoir, NGRC, spectralRadius, FFN } from "../js/models.js";
-import { flowSetup, explainFFN, explainESN } from "../js/core.js";
+import { flowSetup, explainFFN, explainESN, flowEcho } from "../js/core.js";
 import { ridge, applyReadout, mseGrad } from "../js/nn.js";
 
 const checks = JSON.parse(readFileSync(new URL("../assets/checks.json", import.meta.url), "utf8"));
@@ -129,6 +129,24 @@ function compare(label, got, want, tol = 1e-6, relative = false) {
     for (let k = 0; k < flow.p; k++) y += flow.F[t * flow.p + k] * flow.B[k];
     return y;
   }), 1e-9);
+}
+
+// parts 2.2–2.3: the echo of one change is an honest rerun of the reservoir
+{
+  const flow = flowSetup();
+  const { res, X, T } = flow;
+  const N = res.N;
+  const t0 = 3200;
+  // a changed input: rerun the whole series with u(t0) + 0.5 and compare
+  const z2 = Float64Array.from(T.z);
+  z2[t0] += 0.5;
+  const X2 = res.run(z2, t0 + 12);
+  const e = flowEcho(flow, t0, { delta: 0.5, K: 12 });
+  compare("echo of a changed input vs a full rerun", Array.from(e.dX), Array.from({ length: 12 * N }, (_, q) => X2[(t0 + Math.floor(q / N)) * N + (q % N)] - X[(t0 + Math.floor(q / N)) * N + (q % N)]), 1e-12);
+  // a nudge: at k = 0 only the nudged neuron differs, by exactly δ; with δ = 0 nothing changes at all
+  const n = flowEcho(flow, t0, { neuron: 7, delta: 0.5, K: 3 });
+  compare("echo of a nudge at k = 0: δ at one neuron", Array.from(n.dX.subarray(0, N)), Array.from({ length: N }, (_, i) => (i === 7 ? 0.5 : 0)), 1e-12);
+  compare("echo with δ = 0 is zero", Array.from(flowEcho(flow, t0, { neuron: 7, delta: 0, K: 5 }).dX), new Array(5 * N).fill(0), 0);
 }
 
 console.log(`\n${failed ? `${failed} check(s) FAILED` : "all checks passed"} · largest absolute difference ${worst.toExponential(2)}`);

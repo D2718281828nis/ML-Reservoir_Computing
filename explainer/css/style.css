@@ -364,7 +364,39 @@ svg.tanh { width: 240px; max-width: 100%; height: auto; }
 }
 @media (max-width: 640px) {
   .tour-card { grid-template-columns: minmax(0, 1fr); }
+  /* wide sliders: label on its own line, so label + slider + value never overflow a phone */
+  .ctl.wide { flex-wrap: wrap; }
+  .ctl.wide > .lbl { flex-basis: 100%; }
 }
+
+/* 2.2 the loop, unrolled */
+.loopviz .clabel.now { fill: var(--accent); }
+.loopviz .in-line { stroke: var(--muted); stroke-width: 1.2; }
+.loopviz .keep-band { fill: var(--s1); opacity: .07; }
+.loopviz .keep-line { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 4 3; }
+.loopviz .mix-line { fill: none; opacity: .9; }
+.loopviz .slide { will-change: transform; }
+table.ledger td.hand { background: var(--accent-soft); font-weight: 650; }
+table.ledger td.hand-now { box-shadow: inset 0 0 0 2px var(--accent); font-weight: 650; }
+table.ledger tr.writes td:first-child { font-weight: 600; }
+table.ledger td:first-child { font-family: var(--mono); font-size: 12px; }
+table.ledger th { text-transform: none; letter-spacing: 0; font-size: 12px; } /* keep t−2 from turning into T−2 */
+
+/* 2.3 the reservoir as a graph */
+.graph-wrap { flex: 1 1 460px; min-width: 0; max-width: 640px; }
+svg.graphviz { display: block; width: 100%; height: auto; background: var(--surface-2); border-radius: 10px; touch-action: manipulation; }
+.graph-side { flex: 1 1 300px; }
+.graphviz .g-edges line { stroke: var(--line-strong); stroke-width: .6; opacity: .45; }
+.graphviz .g-hl { opacity: .95; }
+.graphviz .g-out { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; opacity: .55; }
+.graphviz .g-node { stroke: var(--surface); stroke-width: 1.6; cursor: pointer; transition: fill .2s ease; }
+.graphviz .g-node:hover { stroke: var(--ink); }
+.graphviz .g-sel { fill: none; stroke: var(--accent); stroke-width: 2.4; pointer-events: none; }
+.graphviz .arrow-head-ink { fill: var(--ink-2); }
+.graphviz .g-input circle { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.4; }
+.graphviz .g-input text { font: 600 14px var(--font); fill: var(--ink-2); }
+.graphviz .g-input.lit circle { stroke: var(--accent); stroke-width: 3; fill: var(--accent-soft); }
+.echo-box[hidden] { display: none; }
 
 /* stacked small charts (neuron traces) */
 .minis-3 { display: grid; gap: 2px; }

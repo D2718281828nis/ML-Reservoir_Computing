@@ -3,6 +3,7 @@
 import { loadJSON, placeholder, resetPalette } from "./util.js";
 import { T } from "./i18n.js";
 import { initFlow } from "./sec-flow.js";
+import { initLoop, initGraph } from "./sec-graph.js";
 import { initFFN } from "./sec-ffn.js";
 import { initInside, initMemory } from "./sec-reservoir.js";
 import { initRace } from "./sec-race.js";
@@ -26,6 +27,11 @@ async function main() {
     }
   };
   boot("viz-flow", initFlow);
+  const flowApi = sections.at(-1)?.api;
+  if (flowApi) {
+    boot("viz-loop", initLoop, flowApi);
+    boot("viz-graph", initGraph, flowApi);
+  }
   boot("viz-ffn", initFFN);
   boot("viz-inside", initInside);
   boot("viz-memory", initMemory);

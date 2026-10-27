@@ -442,3 +442,92 @@ export function explainESN(flow, t) {
   const y = outTerms.reduce((a, c) => a + c, 0);
   return { t, u, prev: Float64Array.from(prev), inTerm, recTerms, idx, deg, bias: b, pre, act, x, leak, outTerms, f: Float64Array.from(f), y, N, p };
 }
+
+// The echo of one change: rerun the reservoir from t0 with either one neuron's state nudged (x_i(t0) + δ) or one input
+// changed (u(t0) + δ), and return the difference to the undisturbed run for k = 0 … K−1 steps after t0.
+export function flowEcho(flow, t0, { neuron = null, delta = 0.5, K = 40 } = {}) {
+  const { res, X, T, F, B, p } = flow;
+  const N = res.N;
+  const x = Float64Array.from(X.subarray((t0 - 1) * N, t0 * N));
+  const tmp = new Float64Array(N);
+  const u = new Float64Array(1);
+  const dX = new Float64Array(K * N);
+  const dY = new Float64Array(K);
+  const rms = new Float64Array(K);
+  for (let k = 0; k < K; k++) {
+    const t = t0 + k;
+    u[0] = T.z[t] + (neuron == null && k === 0 ? delta : 0);
+    res.step(x, u, tmp);
+    if (neuron != null && k === 0) x[neuron] += delta; // the nudge happens right after the update at t0
+    let y = B[0] + B[1] * u[0];
+    let s2 = 0;
+    for (let i = 0; i < N; i++) {
+      const d = x[i] - X[t * N + i];
+      dX[k * N + i] = d;
+      s2 += d * d;
+      y += B[2 + i] * x[i];
+    }
+    let y0 = 0;
+    for (let q = 0; q < p; q++) y0 += F[t * p + q] * B[q];
+    dY[k] = y - y0;
+    rms[k] = Math.sqrt(s2 / N);
+  }
+  return { t0, neuron, delta, K, N, dX, dY, rms };
+}
+
+// A force-directed layout of the reservoir's graph (Fruchterman–Reingold), deterministic; positions in [0, 1]².
+export function graphLayout(res, iters = 300, seed = 7) {
+  const { N, deg, idx } = res;
+  const r = rng(seed);
+  const P = Float64Array.from({ length: 2 * N }, () => r.uniform());
+  const D = new Float64Array(2 * N);
+  const k = Math.sqrt(1 / N);
+  for (let it = 0; it < iters; it++) {
+    D.fill(0);
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const dx = P[2 * i] - P[2 * j];
+        const dy = P[2 * i + 1] - P[2 * j + 1];
+        const d2 = dx * dx + dy * dy + 1e-9;
+        const f = (k * k) / d2; // repulsion k²/d, along the unit vector
+        D[2 * i] += dx * f;
+        D[2 * i + 1] += dy * f;
+        D[2 * j] -= dx * f;
+        D[2 * j + 1] -= dy * f;
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      for (let q = 0; q < deg; q++) {
+        const j = idx[i * deg + q];
+        const dx = P[2 * i] - P[2 * j];
+        const dy = P[2 * i + 1] - P[2 * j + 1];
+        const d = Math.sqrt(dx * dx + dy * dy) + 1e-9;
+        const f = d / k; // attraction d²/k, along the unit vector
+        D[2 * i] -= dx * f;
+        D[2 * i + 1] -= dy * f;
+        D[2 * j] += dx * f;
+        D[2 * j + 1] += dy * f;
+      }
+    }
+    const temp = 0.1 * (1 - it / iters) + 0.002;
+    for (let i = 0; i < N; i++) {
+      const dx = D[2 * i];
+      const dy = D[2 * i + 1];
+      const d = Math.sqrt(dx * dx + dy * dy) + 1e-9;
+      const step = Math.min(d, temp);
+      P[2 * i] += (dx / d) * step;
+      P[2 * i + 1] += (dy / d) * step;
+      // a weak pull to the centre keeps the picture round
+      P[2 * i] += (0.5 - P[2 * i]) * 0.01;
+      P[2 * i + 1] += (0.5 - P[2 * i + 1]) * 0.01;
+    }
+  }
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < N; i++) (x0 = Math.min(x0, P[2 * i])), (x1 = Math.max(x1, P[2 * i])), (y0 = Math.min(y0, P[2 * i + 1])), (y1 = Math.max(y1, P[2 * i + 1]));
+  const sc = Math.max(x1 - x0, y1 - y0) || 1;
+  for (let i = 0; i < N; i++) {
+    P[2 * i] = 0.5 + (P[2 * i] - (x0 + x1) / 2) / sc;
+    P[2 * i + 1] = 0.5 + (P[2 * i + 1] - (y0 + y1) / 2) / sc;
+  }
+  return P;
+}

@@ -27,7 +27,7 @@
   <div class="topbar-inner">
     <a class="brand" href="#">Reservoir Computing <span>Explainer</span></a>
     <nav class="pipeline" id="pipeline" aria-label="Sections">
-      <a href="#two-map">map</a><a href="#flow-live">flow</a>
+      <a href="#two-map">map</a><a href="#flow-live">flow</a><a href="#flow-graph">graph</a>
       <span class="arrow">→</span>
       <a href="#ffn-live">FFN</a>
       <span class="arrow">→</span>
@@ -154,8 +154,38 @@
     <div class="viz" id="viz-flow"></div>
   </article>
 
+  <article class="step" id="flow-loop">
+    <h3><span class="step-num">2.2</span> The loop, unrolled: how x(t) becomes x(t−1)</h3>
+    <p>The arrow under the reservoir in 2.1 is the whole trick of a recurrent network, so here it is unrolled in time. The four columns are the same 100 neurons
+      at four consecutive steps. Each update reads one column and the new input and writes the next column:</p>
+    <div class="formula"><span class="tex" data-tex="\underbrace{x(t)}_{\text{written}} = \underbrace{(1-\alpha)\,x(t-1)}_{\text{kept}} + \alpha \tanh\big(\underbrace{W_{\text{in}}\,u(t)}_{\text{new input}} + \underbrace{W\,x(t-1)}_{\text{mixed}} + b\big)">x(t) = (1−α) x(t−1) + α tanh(W_in u(t) + W x(t−1) + b)</span></div>
+    <p>"x(t) becomes x(t−1)" means nothing more than this: the column written at step <i>t</i> is the column read at step <i>t</i> + 1. Press <b>Step</b> and watch.
+      The slot names stay where they are, and the columns slide left under them, so the strip you just saw as x(t) is now labeled x(t−1). Nothing is copied
+      and nothing else is stored: there is no window and no buffer of old inputs. Whatever the ESN can know about <span class="tex" data-tex="u(t-10)">u(t−10)</span>
+      has survived ten passes through this update, along two paths. The <b>leak</b> keeps a fraction <span class="tex" data-tex="1-\alpha">1 − α</span> of each neuron's
+      own value (the straight band). <b>W</b> mixes in the 10 neurons each neuron listens to (the curved lines, drawn for the neuron you follow, colored and sized by
+      what each passes on).</p>
+    <div class="viz" id="viz-loop"></div>
+  </article>
+
+  <article class="step" id="flow-graph">
+    <h3><span class="step-num">2.3</span> The reservoir as a graph</h3>
+    <p>The same 100 neurons, drawn as what they are: a directed graph. Each neuron listens to 10 others, which makes 1,000 links, with random weights scaled to
+      the spectral radius ρ. Hover a neuron to see whom it listens to and who listens to it; click it to follow it in 2.1 and 2.2. The time step, the selected neuron
+      and the ρ, α and λ settings are shared with 2.1.</p>
+    <div class="viz" id="viz-graph"></div>
+    <p>Choose <b>echo of one change</b> and press <b>Play</b>. Nudging one neuron's state by 0.5 shows how information travels along the links. At k = 0 only that
+      neuron differs; one step later, the dozen or so that listen to it; two steps later, about 70 of the 100; and then the difference fades step by step. That
+      fading is the echo state property of part 4.2, seen from the inside. Changing one <i>input</i> value instead reaches every neuron at once, because
+      <span class="tex" data-tex="W_{\text{in}}">W_in</span> feeds all of them, and its effect on the forecast dies out over about 40 steps: that is how long this
+      reservoir remembers a single value.</p>
+    <div class="callout warn"><p><b>A second look at the readout.</b> With the λ chosen on validation, a nudge of 0.5 to a single neuron moves the forecast by
+      about 6 standard deviations (the median over neurons; more than 50 for some). A real input never pushes the state off its usual track like that, so the
+      test error stays low. But it is the large, cancelling readout weights of 2.1 at work. Set λ = 10⁻⁴ in 2.1 and the same nudge moves the forecast by about 0.2.</p></div>
+  </article>
+
   <article class="step" id="flow-read">
-    <h3><span class="step-num">2.2</span> What the flow shows</h3>
+    <h3><span class="step-num">2.4</span> What the flow shows</h3>
     <ul>
       <li><b>Width is memory.</b> The FFN's input band is 20 numbers wide, and nothing comes back from its hidden layer: at every step it starts from scratch.
         The ESN's input is a thread, a single number, but a 100-number band arrives from the previous step. The state carries the past.</li>
