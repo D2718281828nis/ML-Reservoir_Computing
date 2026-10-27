@@ -8,7 +8,7 @@ import { mackeyGlass, lorenz } from "../js/data.js";
 import { Reservoir, NGRC, spectralRadius, FFN, eigenvalues, denseW } from "../js/models.js";
 import { flowSetup, explainFFN, explainESN, flowEcho } from "../js/core.js";
 import { ridge, applyReadout, mseGrad } from "../js/nn.js";
-import { plant, simulate, impulse, staircase, identify, hankelSV } from "../js/control.js";
+import { plant, simulate, impulse, staircase, identify, hankelSV, realizePoles, residues, symEig } from "../js/control.js";
 
 const checks = JSON.parse(readFileSync(new URL("../assets/checks.json", import.meta.url), "utf8"));
 let worst = 0;
@@ -136,6 +136,21 @@ function compare(label, got, want, tol = 1e-6, relative = false) {
   }
   compare("reservoir linearization: x(k)/ε = AᵏB", got, want, 1e-9);
   compare("trained reservoir reproduces the plant's h(k)", impulse(m, 60), Array.from(impulse(sys, 60)), 2e-3);
+  // 8.4: ERA recovers the poles; modal residues rebuild h(k) = Σ ρᵢ λᵢᵏ (+ D at k = 0); Jacobi gives S v = λ v
+  const byIm = (ps) => [...ps].sort((p, q) => p.im - q.im).flatMap((p) => [p.re, p.im]);
+  compare("ERA on the plant's h(k) = plant poles", byIm(realizePoles(impulse(sys, 70), 2, 30, eigenvalues)), byIm(sys.poles), 1e-9);
+  compare("ERA on the reservoir's h(k) ≈ plant poles", byIm(realizePoles(impulse(m, 70), 2, 30, eigenvalues)), byIm(sys.poles), 1e-3);
+  const eigs = eigenvalues(m.A.map((r) => Array.from(r)));
+  const rho = residues(m, eigs);
+  const rebuilt = Array.from({ length: 31 }, (_, k) => eigs.reduce((acc, l, i) => {
+    const mag = Math.hypot(l.re, l.im) ** k;
+    const ang = Math.atan2(l.im, l.re) * k;
+    return acc + rho[i].re * mag * Math.cos(ang) - rho[i].im * mag * Math.sin(ang);
+  }, k === 0 ? m.D : 0));
+  compare("modal residues rebuild h(k)", rebuilt, Array.from(impulse(m, 30)), 1e-3);
+  const S = Array.from({ length: 12 }, (_, i) => Array.from({ length: 12 }, (_, j) => Math.cos(i * 1.3 + j * 1.3) + (i === j ? i : 0)));
+  const se = symEig(S);
+  compare("symmetric eigenpairs: S v = λ v", se.vectors.map((v, a) => S.map((row) => row.reduce((acc, x, j) => acc + x * v[j], 0) - se.values[a] * v[S.indexOf(row)])), Array(144).fill(0), 1e-10);
 }
 
 // backprop of the feed-forward network, against central finite differences

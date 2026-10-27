@@ -503,3 +503,16 @@ svg.ctlviz { display: block; width: 100%; height: auto; background: var(--surfac
 .ctlviz .ctl-node.io-out circle { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.8; }
 .ctlviz .ctl-node text { font: 600 13px var(--font); fill: var(--ink); pointer-events: none; }
 .eigviz .pole line { stroke: var(--ink); stroke-width: 2.2; }
+.bg-accent { background: var(--accent); }
+.eigviz .era { fill: none; stroke: var(--accent); stroke-width: 2; }
+.ctlviz .ctl-node.hot { cursor: pointer; }
+.ctlviz .ctl-node.on circle:last-child, .ctlviz .ctl-node.sel circle:last-child { stroke: var(--ink); stroke-width: 2.2; }
+.ctlviz .ctl-node.sel .ring { stroke: var(--ink); stroke-width: 2; stroke-opacity: 1; }
+.ctlviz .ctl-edge.zero { opacity: .12; }
+.ctlviz.focus .ctl-edge { opacity: .06; }
+.ctlviz.focus .ctl-edge.hl { opacity: 1; }
+.ctlviz .g-io-val { font: 500 11.5px var(--mono); fill: var(--ink-2); }
+.ctl-info { min-height: 92px; margin-top: 8px; }
+.ctl-info .ctl-eq { font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; margin: 4px 0 6px; color: var(--ink); }
+.ctl-side { flex: 0 1 300px; max-width: 320px; }
+.ctl-side .eig-plane { flex: none; width: 100%; max-width: 280px; }

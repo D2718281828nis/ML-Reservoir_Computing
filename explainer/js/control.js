@@ -118,3 +118,131 @@ export function hankelSV(h, m, eig) {
   const H = Array.from({ length: m }, (_, i) => Array.from({ length: m }, (_, j) => h[i + j + 1]));
   return eig(H).map((e) => Math.hypot(e.re, e.im)).sort((a, b) => b - a);
 }
+
+// Eigen-decomposition of a symmetric matrix by cyclic Jacobi rotations: { values, vectors (columns) }, sorted by |value|.
+export function symEig(S, sweeps = 60) {
+  const n = S.length;
+  const a = S.map((r) => Float64Array.from(r));
+  const V = Array.from({ length: n }, (_, i) => Float64Array.from({ length: n }, (_, j) => +(i === j)));
+  for (let sw = 0; sw < sweeps; sw++) {
+    let off = 0;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += a[p][q] ** 2;
+    if (off < 1e-30) break;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+      if (Math.abs(a[p][q]) < 1e-300) continue;
+      const th = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+      const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+      const c = 1 / Math.sqrt(t * t + 1);
+      const s = t * c;
+      for (let k = 0; k < n; k++) {
+        const akp = a[k][p];
+        const akq = a[k][q];
+        a[k][p] = c * akp - s * akq;
+        a[k][q] = s * akp + c * akq;
+      }
+      for (let k = 0; k < n; k++) {
+        const apk = a[p][k];
+        const aqk = a[q][k];
+        a[p][k] = c * apk - s * aqk;
+        a[q][k] = s * apk + c * aqk;
+      }
+      for (let k = 0; k < n; k++) {
+        const vkp = V[k][p];
+        const vkq = V[k][q];
+        V[k][p] = c * vkp - s * vkq;
+        V[k][q] = s * vkp + c * vkq;
+      }
+    }
+  }
+  const order = Array.from({ length: n }, (_, i) => i).sort((i, j) => Math.abs(a[j][j]) - Math.abs(a[i][i]));
+  return { values: order.map((i) => a[i][i]), vectors: order.map((i) => V.map((row) => row[i])) };
+}
+
+// Ho–Kalman / eigensystem realization: an order-r model from the impulse response h, and its poles.
+// H₀ = [h(i+j+1)], H₁ = [h(i+j+2)] (m × m, symmetric for one input and one output); H₀ ≈ P Q with P = V|Λ|^½, Q = sgn(Λ)|Λ|^½Vᵀ;
+// then A_r = P⁺ H₁ Q⁺ is similar to the A of any realization with this impulse response, cut to its r dominant directions.
+export function realizePoles(h, r, m, eig) {
+  const H0 = Array.from({ length: m }, (_, i) => Array.from({ length: m }, (_, j) => h[i + j + 1]));
+  const H1 = Array.from({ length: m }, (_, i) => Array.from({ length: m }, (_, j) => h[i + j + 2]));
+  const { values, vectors } = symEig(H0);
+  const Ar = Array.from({ length: r }, (_, a) => Array.from({ length: r }, (_, b) => {
+    let acc = 0;
+    for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) acc += vectors[a][i] * H1[i][j] * vectors[b][j];
+    return (acc / Math.sqrt(Math.abs(values[a]) * Math.abs(values[b]))) * Math.sign(values[b]);
+  }));
+  return eig(Ar);
+}
+
+// Modal residues: G(z) = D + Σᵢ ρᵢ · z / (z − λᵢ), so h(k) = Σᵢ ρᵢ λᵢᵏ (+ D at k = 0). ρᵢ = (C vᵢ)(wᵢᴴ B) for eigenvector vᵢ and
+// left eigenvector wᵢ; computed without eigenvectors as ρᵢ ≈ δ · C (μI − A)⁻¹ B at μ = λᵢ + δ (complex Gaussian elimination).
+export function residues(model, eigs) {
+  const { A, B, C, n } = model;
+  return eigs.map((l) => {
+    const d = 1e-7 * (1 + Math.hypot(l.re, l.im));
+    const Ar = A.map((row, i) => Float64Array.from(row, (v, j) => (i === j ? l.re + d : 0) - v));
+    const Ai = A.map((_, i) => Float64Array.from({ length: n }, (_, j) => (i === j ? l.im : 0)));
+    const br = Float64Array.from(B);
+    const bi = new Float64Array(n);
+    for (let c = 0; c < n; c++) {
+      let p = c;
+      for (let r = c + 1; r < n; r++) if (Math.hypot(Ar[r][c], Ai[r][c]) > Math.hypot(Ar[p][c], Ai[p][c])) p = r;
+      [Ar[c], Ar[p], Ai[c], Ai[p]] = [Ar[p], Ar[c], Ai[p], Ai[c]];
+      [br[c], br[p], bi[c], bi[p]] = [br[p], br[c], bi[p], bi[c]];
+      const pr = Ar[c][c];
+      const pi = Ai[c][c];
+      const den = pr * pr + pi * pi;
+      for (let r = c + 1; r < n; r++) {
+        const fr = (Ar[r][c] * pr + Ai[r][c] * pi) / den;
+        const fi = (Ai[r][c] * pr - Ar[r][c] * pi) / den;
+        if (!fr && !fi) continue;
+        for (let k = c; k < n; k++) {
+          const xr = Ar[c][k];
+          const xi = Ai[c][k];
+          Ar[r][k] -= fr * xr - fi * xi;
+          Ai[r][k] -= fr * xi + fi * xr;
+        }
+        const xr = br[c];
+        const xi = bi[c];
+        br[r] -= fr * xr - fi * xi;
+        bi[r] -= fr * xi + fi * xr;
+      }
+    }
+    const xr = new Float64Array(n);
+    const xi = new Float64Array(n);
+    for (let r = n - 1; r >= 0; r--) {
+      let sr = br[r];
+      let si = bi[r];
+      for (let k = r + 1; k < n; k++) {
+        sr -= Ar[r][k] * xr[k] - Ai[r][k] * xi[k];
+        si -= Ar[r][k] * xi[k] + Ai[r][k] * xr[k];
+      }
+      const pr = Ar[r][r];
+      const pi = Ai[r][r];
+      const den = pr * pr + pi * pi;
+      xr[r] = (sr * pr + si * pi) / den;
+      xi[r] = (si * pr - sr * pi) / den;
+    }
+    let gr = 0;
+    let gi = 0;
+    for (let i = 0; i < n; i++) {
+      gr += C[i] * xr[i];
+      gi += C[i] * xi[i];
+    }
+    return { re: gr * d, im: gi * d };
+  });
+}
+
+// States after a unit impulse at k = 0: x(k) = Aᵏ B, k = 0 … K (rows).
+export function impulseStates(model, K) {
+  const { A, B, n } = model;
+  const X = [Float64Array.from(B)];
+  for (let k = 1; k <= K; k++) {
+    const p = X[k - 1];
+    X.push(Float64Array.from({ length: n }, (_, i) => {
+      let a = 0;
+      for (let j = 0; j < n; j++) a += A[i][j] * p[j];
+      return a;
+    }));
+  }
+  return X;
+}

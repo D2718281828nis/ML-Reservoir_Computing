@@ -553,6 +553,41 @@
         <span class="tex" data-tex="f">f</span> at the operating point. Try input gain 1 in section 8.2: the impulse responses part ways.</li>
     </ul>
   </article>
+  <article class="step" id="ctl-poles">
+    <h3><span class="step-num">8.4</span> Why the Plant's Poles and the Reservoir's Eigenvalues Can Be Compared</h3>
+    <p>The z-plane in section 8.3 shows quantities of two different models: the poles of the plant (two values) and the eigenvalues of the reservoir's matrix
+      <span class="tex" data-tex="A">A</span> (50 values). Comparing them is legitimate for three reasons, but requires an important qualification.</p>
+    <ol>
+      <li><b>A common time scale.</b> Both models are discrete-time with the same step. An eigenvalue <span class="tex" data-tex="\lambda">λ</span> contributes a term
+        <span class="tex" data-tex="\rho\,\lambda^k">ρλᵏ</span> to the impulse response, so a point of the z-plane stands for the same behaviour whichever model it belongs to:
+    <div class="formula"><span class="tex" data-tex="h(k) = \sum_{i} \rho_i\, \lambda_i^{\,k}, \qquad |\lambda_i| = \text{decay per step}, \quad \arg \lambda_i = \text{phase per step}">h(k) = Σ ρᵢ λᵢᵏ</span></div>
+      </li>
+      <li><b>Invariance to the choice of coordinates.</b> Under a change of state <span class="tex" data-tex="x \to Tx">x → Tx</span> the matrices become
+        <span class="tex" data-tex="(TAT^{-1},\ TB,\ CT^{-1},\ D)">(TAT⁻¹, TB, CT⁻¹, D)</span>, while the eigenvalues of <span class="tex" data-tex="A">A</span> do not change. As shown in 8.3, the matrices
+        themselves are not determined by the data, whereas the eigenvalues are a coordinate-free property of the model. Models of different dimension
+        (2 and 50 states) are therefore compared through them.</li>
+      <li><b>Stability and memory.</b> For both models <span class="tex" data-tex="|\lambda| < 1">|λ| < 1</span> means asymptotic stability, and the largest
+        <span class="tex" data-tex="|\lambda|">|λ|</span> sets the slowest decay, that is, the length of the memory.</li>
+    </ol>
+    <p><b>Qualification: the reservoir's eigenvalues are not estimates of the plant's poles.</b> The poles of a transfer function coincide with the eigenvalues of
+      <span class="tex" data-tex="A">A</span> only for a minimal (controllable and observable) realization. The reservoir is a non-minimal realization, and its transfer function
+      decomposes into modes:</p>
+    <div class="formula"><span class="tex" data-tex="G_{\text{res}}(z) = D + \sum_{i=1}^{50} \rho_i\, \frac{z}{z-\lambda_i}, \qquad \rho_i = (C v_i)(w_i^{\mathsf H} B)">G_res(z) = D + Σ ρᵢ z/(z − λᵢ)</span></div>
+    <p>Here <span class="tex" data-tex="v_i">vᵢ</span> and <span class="tex" data-tex="w_i">wᵢ</span> are the right and left eigenvectors. Training does not move the <span class="tex" data-tex="\lambda_i">λᵢ</span>: they are set by the
+      random matrix <span class="tex" data-tex="W">W</span> and the leak α. Only <span class="tex" data-tex="C">C</span> is trained, and with it the residues <span class="tex" data-tex="\rho_i">ρᵢ</span>. The plant's two modes are
+      synthesized from many reservoir modes with large weights of opposite sign: with the default settings <span class="tex" data-tex="\sum_i |\rho_i| \approx 134">Σ|ρᵢ| ≈ 134</span> while
+      <span class="tex" data-tex="\max_k |h(k)| \approx 0.2">max|h(k)| ≈ 0.2</span>. The practical consequence is that a necessary condition for good identification is <i>coverage</i>:
+      the reservoir must have eigenvalues near the plant's poles, in particular at least as slow (<span class="tex" data-tex="|\lambda_i| \ge |p|">|λᵢ| ≥ |p|</span>); otherwise no
+      combination of them can reproduce the slow tail <span class="tex" data-tex="p^k">pᵏ</span>. This is what the slow-plant experiment of 8.2 showed: lowering α moves the eigenvalues towards
+      <span class="tex" data-tex="z = 1">z = 1</span>, and the error falls from 0.18 to 0.006.</p>
+    <p><b>How to estimate the poles from the reservoir.</b> The proper procedure is to reduce the reservoir model to a minimal one and compare the poles of that model.
+      The Ho–Kalman algorithm (the eigensystem realization algorithm, ERA) builds Hankel matrices from the impulse response, keeps their two principal directions
+      and recovers a second-order dynamics matrix:</p>
+    <div class="formula"><span class="tex" data-tex="H_0 = \big[h(i+j+1)\big],\quad H_1 = \big[h(i+j+2)\big],\quad H_0 \approx P Q \ (\text{rank } 2),\quad A_r = P^{+} H_1 Q^{+}">H₀ ≈ PQ, A_r = P⁺ H₁ Q⁺</span></div>
+    <p>The poles of <span class="tex" data-tex="A_r">A_r</span> are shown as rings on the z-plane in 8.3. With the default settings they coincide with the plant's poles to about
+      <span class="tex" data-tex="10^{-4}">10⁻⁴</span>. With input gain 1 they part (0.879 ± 0.308i against 0.860 ± 0.266i): the reservoir operates in its nonlinear range, and its
+      linearization no longer describes the input–output map.</p>
+  </article>
 </section>
 
 <!-- ───────────────────────── 9. Takeaways ───────────────────────── -->

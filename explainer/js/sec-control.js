@@ -4,15 +4,16 @@
 //        the two impulse responses, and the Hankel singular values that reveal how many states the map really needs.
 // One plant and one reservoir are shared by all three steps through a small publish/subscribe api.
 
-import { h, s, fmt, slider, widthOf, diverging, rgbCss, showTip, hideTip, perFrame } from "./util.js";
+import { h, s, fmt, ctl, segToggle, slider, widthOf, visibility, diverging, rgbCss, showTip, hideTip, perFrame } from "./util.js";
 import { lineChart, legendRow, log10, powFmt } from "./charts.js";
 import { graphLayout } from "./core.js";
 import { eigenvalues } from "./models.js";
-import { CTRL, plant, impulse, staircase, identify, hankelSV } from "./control.js";
+import { CTRL, plant, impulse, staircase, identify, hankelSV, realizePoles, residues, impulseStates } from "./control.js";
 import { T } from "./i18n.js";
 
 const fmt2 = (v) => fmt(v, 2);
 const SHOW = 400; // steps of input and output shown in 8.1
+const KG = 40; // steps of the impulse played through the graph
 
 export function initControl(plantRoot, identRoot, abcdRoot) {
   const st = { r: 0.9, theta: 0.3, d: 0, rho: 0.99, leak: 0.5, inScale: 0.01, seed: 1 };
@@ -39,7 +40,7 @@ export function initControl(plantRoot, identRoot, abcdRoot) {
     plantMats,
     h("div", { class: "viz-row" },
       h("div", { class: "grow" }, h("p", { class: "panel-title" }, T.ctlPlantGraph), plantGraph, h("p", { class: "sub", html: T.ctlPlantGraphNote })),
-      h("div", null, h("p", { class: "panel-title" }, T.ctlPoles), plantPlane)),
+      h("div", { class: "ctl-side" }, h("p", { class: "panel-title" }, T.ctlPoles), plantPlane)),
     h("p", { class: "panel-title" }, T.ctlSeriesTitle),
     legendRow([["muted", "u(t)"], ["ink", "y(t)"]]),
     plantSeries,
@@ -62,17 +63,36 @@ export function initControl(plantRoot, identRoot, abcdRoot) {
   );
 
   // ── 8.3 the reservoir as (A, B, C, D) ──
+  // g: what the graph shows. "weights": every edge colored by its entry of A, B, C, D. "impulse": a unit impulse u(0) = 1
+  // played through the graph, x(k) = Aᵏ B, every edge colored by what it carries at step k. focus: hovered or clicked neuron.
+  const g = { mode: "weights", k: 0, hover: null, sel: null, playing: false };
+  const isVisible = visibility(abcdRoot);
+  let graph = null;
   const resGraph = h("div", { class: "ctl-graph" });
+  const graphInfo = h("div", { class: "ctl-info" });
   const resPlane = h("div", { class: "eig-plane" });
+  const eraNote = h("p", { class: "sub" });
   const resMats = h("div");
   const impBox = h("div", { class: "grow" });
   const hankBox = h("div", { class: "grow" });
   const abcdNote = h("p", { class: "sub" });
+  const kCtl = slider(T.ctlKLabel, { min: 0, max: KG, step: 1, value: g.k, onInput: (v) => ((g.k = v), paint(), drawImpulse()), wide: true });
+  const playBtn = h("button", { class: "btn", type: "button" }, T.play);
+  playBtn.addEventListener("click", () => (g.playing ? stopPlay() : startPlay()));
+  const impulseCtl = h("div", { class: "controls", style: { display: "none" } }, kCtl, playBtn);
   abcdRoot.replaceChildren(
     resMats,
+    h("div", { class: "controls" }, ctl(T.ctlShow, segToggle([["weights", T.ctlModeWeights], ["impulse", T.ctlModeImpulse]].map(([value, label]) => ({ value, label })), g.mode, (v) => {
+      g.mode = v;
+      impulseCtl.style.display = v === "impulse" ? "" : "none";
+      if (v !== "impulse") stopPlay();
+      paint();
+      drawImpulse();
+    }, T.ctlShow))),
+    impulseCtl,
     h("div", { class: "viz-row" },
-      h("div", { class: "grow" }, h("p", { class: "panel-title" }, T.ctlResGraph(CTRL.N)), resGraph, h("p", { class: "sub", html: T.ctlResGraphNote })),
-      h("div", null, h("p", { class: "panel-title" }, T.ctlEigs), resPlane)),
+      h("div", { class: "grow" }, h("p", { class: "panel-title" }, T.ctlResGraph(CTRL.N)), resGraph, graphInfo, h("p", { class: "sub", html: T.ctlResGraphNote })),
+      h("div", { class: "ctl-side" }, h("p", { class: "panel-title" }, T.ctlEigs), resPlane, eraNote)),
     h("div", { class: "viz-row" },
       h("div", { class: "grow" }, h("p", { class: "panel-title" }, T.ctlImpulse), legendRow([["ink", T.ctlPlantShort], ["s1", T.ctlResShort, "dash"]]), impBox),
       h("div", { class: "grow" }, h("p", { class: "panel-title" }, T.ctlHankel), legendRow([["ink", T.ctlPlantShort], ["s1", T.ctlResShort, "dash"]]), hankBox)),
@@ -90,6 +110,10 @@ export function initControl(plantRoot, identRoot, abcdRoot) {
     id.hR = impulse(id.model, CTRL.K);
     id.svP = hankelSV(impulse(sys, 2 * 30), 30, eigenvalues);
     id.svR = hankelSV(impulse(id.model, 2 * 30), 30, eigenvalues);
+    // poles of the order-2 model realized from each impulse response (Ho–Kalman / ERA), and the reservoir's modal residues
+    id.eraR = realizePoles(impulse(id.model, 70), 2, 30, eigenvalues);
+    id.rho = residues(id.model, id.eigs);
+    id.X = impulseStates(id.model, KG);
   }
 
   function drawAll() {
@@ -156,32 +180,21 @@ export function initControl(plantRoot, identRoot, abcdRoot) {
     tex(resMats, `A = (1-\\alpha) I + \\alpha W \\in \\mathbb{R}^{${N}\\times${N}},\\quad B = \\alpha\\, W_{\\text{in}},\\quad C = W_{\\text{out}}^{(x)},\\quad D = W_{\\text{out}}^{(u)} = ${num(m.D)}`,
       `A = (1−α)I + αW (${N}×${N}), B = α·W_in, C = W_out(x), D = W_out(u) = ${fmt(m.D, 3)}`);
 
-    // the reservoir graph: same reading as the plant's. Self-loops (1 − α) are drawn as rings, the 400 links of αW as edges.
-    const P = id.layout;
-    const GW = 480;
-    const GH = 360;
-    const nodes = [{ id: "u", x: 30, y: GH / 2, label: "u(t)", cls: "io-in" }, { id: "y", x: GW - 30, y: GH / 2, label: "y(t)", cls: "io-out" }];
-    for (let i = 0; i < N; i++) nodes.push({ id: i, x: 90 + P[2 * i] * (GW - 180), y: 22 + P[2 * i + 1] * (GH - 44), cls: "state small", tip: i });
-    const edges = [];
-    const { deg, idx } = id.res;
-    for (let i = 0; i < N; i++) for (let k = i * deg; k < (i + 1) * deg; k++) if (idx[k] !== i) edges.push({ from: idx[k], to: i, w: m.A[i][idx[k]], thin: true });
-    for (let i = 0; i < N; i++) edges.push({ from: "u", to: i, w: m.B[i], thin: true, group: "B" });
-    for (let i = 0; i < N; i++) edges.push({ from: i, to: "y", w: m.C[i], thin: true, group: "C" });
-    edges.push({ from: "u", to: "y", w: m.D, curve: -GH / 2 + 8, label: `D = ${fmt(m.D, 2)}`, group: "D" });
-    resGraph.replaceChildren(flowGraph({ width: GW, height: GH, nodes, edges, perGroupScale: true, ring: 1 - st.leak, aria: T.ctlResGraph(N), tip: (i) => nodeTip(i) }));
+    graph = buildResGraph();
+    paint();
 
-    resPlane.replaceChildren(zPlane({ crosses: sys.poles, dots: id.eigs, aria: T.ctlEigs }), legendRow([["ink", T.ctlPlantPoles], ["s1", T.ctlResEigs]]));
+    // the z-plane: plant poles, reservoir eigenvalues sized by their residue, poles of the order-2 model realized from the reservoir
+    const rmax = Math.max(1e-300, ...id.rho.map((r) => Math.hypot(r.re, r.im)));
+    const dots = id.eigs.map((e, i) => ({ ...e, r: 2 + 3.5 * Math.sqrt(Math.hypot(id.rho[i].re, id.rho[i].im) / rmax), extra: `ρ = ${cfmt(id.rho[i], 3)}` }));
+    resPlane.replaceChildren(zPlane({ crosses: sys.poles, dots, rings: id.eraR, aria: T.ctlEigs }),
+      legendRow([["ink", T.ctlPlantPoles], ["s1", T.ctlResEigs], ["accent", T.ctlEraPoles]]));
+    const sumRho = id.rho.reduce((acc, r) => acc + Math.hypot(r.re, r.im), 0);
+    const hmax = Math.max(...Array.from(id.hR, Math.abs));
+    const pp = sys.poles.find((p) => p.im >= 0) ?? sys.poles[0];
+    const pe = id.eraR.find((p) => p.im >= 0) ?? id.eraR[0];
+    eraNote.innerHTML = T.ctlEraNote(cfmt(pp, 4), cfmt(pe, 4), fmt(sumRho, sumRho < 10 ? 2 : 0), fmt(hmax, 3));
 
-    const ks = Array.from({ length: CTRL.K + 1 }, (_, k) => k);
-    const W2 = Math.max(260, widthOf(impBox, 360));
-    impBox.replaceChildren(lineChart({
-      width: W2, height: 200, x0: 0, x1: CTRL.K, xLabel: T.ctlK,
-      series: [
-        { xs: ks, ys: Array.from(id.hP), cls: "ink", label: T.ctlPlantShort },
-        { xs: ks, ys: Array.from(id.hR), cls: "s1", dash: true, label: T.ctlResShort },
-      ],
-      tipFmt: (v) => fmt(v, 4), tipTitle: (k) => `k = ${k}`,
-    }));
+    drawImpulse();
     const M = 10;
     const is = Array.from({ length: M }, (_, i) => i + 1);
     const lp = id.svP.slice(0, M).map(log10);
@@ -200,9 +213,166 @@ export function initControl(plantRoot, identRoot, abcdRoot) {
     abcdNote.innerHTML = T.ctlAbcdNote(N, nnz, fmt(rel, 3), id.svR[1] ? (id.svR[2] / id.svR[1]).toExponential(0) : "–", fmt(m.D, 2), fmt(id.hR[0], 3), fmt(id.hP[0], 3));
   }
 
-  function nodeTip(i) {
+  function drawImpulse() {
+    const ks = Array.from({ length: CTRL.K + 1 }, (_, k) => k);
+    impBox.replaceChildren(lineChart({
+      width: Math.max(260, widthOf(impBox, 360)), height: 200, x0: 0, x1: CTRL.K, xLabel: T.ctlK,
+      series: [
+        { xs: ks, ys: Array.from(id.hP), cls: "ink", label: T.ctlPlantShort },
+        { xs: ks, ys: Array.from(id.hR), cls: "s1", dash: true, label: T.ctlResShort },
+      ],
+      marks: g.mode === "impulse" ? [{ x: g.k, cls: "now", label: "k" }] : [],
+      points: g.mode === "impulse" ? [{ x: g.k, y: id.hR[g.k], cls: "s1", r: 5 }] : [],
+      tipFmt: (v) => fmt(v, 4), tipTitle: (k) => `k = ${k}`,
+    }));
+  }
+
+  function startPlay() {
+    g.playing = true;
+    playBtn.textContent = T.pause;
+    if (g.k >= KG) g.k = 0;
+    let last = 0;
+    const tick = (now) => {
+      if (!g.playing) return;
+      if (now - last > 300 && isVisible()) {
+        last = now;
+        if (g.k >= KG) return stopPlay();
+        g.k++;
+        kCtl.set(g.k);
+        paint();
+        drawImpulse();
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  function stopPlay() {
+    g.playing = false;
+    playBtn.textContent = T.play;
+  }
+
+  // The reservoir graph, built once per trained model; paint() recolors it for the mode, the step k and the focused neuron.
+  // Same reading as the plant's graph: an edge j → i is the entry A_ij; fans are B and C; the arc on top is D; rings are A_ii = 1 − α.
+  function buildResGraph() {
     const m = id.model;
-    return `<b>${T.ctlState} x${sub(i + 1)}</b><br><span class="mono">A${sub(i + 1)}${sub(i + 1)} = ${fmt(m.A[i][i], 3)}<br>B${sub(i + 1)} = ${fmt(m.B[i], 4)}<br>C${sub(i + 1)} = ${fmt(m.C[i], 2)}</span>`;
+    const N = m.n;
+    const P = id.layout;
+    const GW = 480;
+    const GH = 380;
+    const U = { x: 30, y: GH / 2 };
+    const Y = { x: GW - 30, y: GH / 2 };
+    const pos = Array.from({ length: N }, (_, i) => ({ x: 90 + P[2 * i] * (GW - 180), y: 34 + P[2 * i + 1] * (GH - 60) }));
+    const svg = s("svg", { class: "ctlviz", viewBox: `0 0 ${GW} ${GH}`, role: "img", "aria-label": T.ctlResGraph(N) });
+    const mid = `ah-${Math.random().toString(36).slice(2, 8)}`;
+    svg.append(s("defs", null, s("marker", { id: mid, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, markerUnits: "userSpaceOnUse", orient: "auto" }, s("path", { d: "M0,0 L10,5 L0,10 z", class: "arrow-head-ink" }))));
+    const edges = [];
+    const line = (a, b, ra, rb) => {
+      const [dx, dy] = unit(b.x - a.x, b.y - a.y);
+      return { x1: a.x + dx * ra, y1: a.y + dy * ra, x2: b.x - dx * rb, y2: b.y - dy * rb };
+    };
+    const layer = s("g");
+    const add = (el, e) => {
+      layer.append(el);
+      edges.push({ el, ...e });
+    };
+    const { deg, idx } = id.res;
+    for (let i = 0; i < N; i++) add(s("line", { class: "ctl-edge thin", ...line(U, pos[i], 21, 8) }), { kind: "B", i });
+    for (let i = 0; i < N; i++) for (let q = i * deg; q < (i + 1) * deg; q++) {
+      const j = idx[q];
+      if (j !== i) add(s("line", { class: "ctl-edge thin", ...line(pos[j], pos[i], 7, 8) }), { kind: "A", i, j });
+    }
+    for (let i = 0; i < N; i++) add(s("line", { class: "ctl-edge thin", ...line(pos[i], Y, 7, 23) }), { kind: "C", i });
+    add(s("path", { class: "ctl-edge", d: `M${U.x},${U.y - 21} Q${GW / 2},${-GH / 2 + 40} ${Y.x},${Y.y - 23}` }), { kind: "D" });
+    svg.append(layer);
+    const dLabel = s("text", { class: "ctl-elabel", x: GW / 2, y: 18, "text-anchor": "middle" });
+    const nodes = pos.map((p, i) => {
+      const ring = s("circle", { class: "ring", cx: p.x, cy: p.y, r: 9, "stroke-opacity": Math.min(1, 0.2 + (1 - st.leak)) });
+      const c = s("circle", { cx: p.x, cy: p.y, r: 6.5 });
+      const gEl = s("g", { class: "ctl-node state small hot" }, ring, c);
+      gEl.addEventListener("pointerenter", () => ((g.hover = i), paint()));
+      gEl.addEventListener("pointerleave", () => ((g.hover = null), paint()));
+      gEl.addEventListener("click", () => ((g.sel = g.sel === i ? null : i), paint()));
+      return { g: gEl, c };
+    });
+    const uVal = s("text", { class: "g-io-val", x: 4, y: U.y + 38, "text-anchor": "start" });
+    const yVal = s("text", { class: "g-io-val", x: GW - 4, y: Y.y + 40, "text-anchor": "end" });
+    svg.append(
+      dLabel,
+      ...nodes.map((n) => n.g),
+      s("g", { class: "ctl-node io-in" }, s("circle", { cx: U.x, cy: U.y, r: 20 }), s("text", { x: U.x, y: U.y + 4.5, "text-anchor": "middle" }, "u(t)")), uVal,
+      s("g", { class: "ctl-node io-out" }, s("circle", { cx: Y.x, cy: Y.y, r: 20 }), s("text", { x: Y.x, y: Y.y + 4.5, "text-anchor": "middle" }, "y(t)")), yVal,
+    );
+    svg.addEventListener("click", (ev) => {
+      if (ev.target === svg) ((g.sel = null), paint());
+    });
+    resGraph.replaceChildren(svg);
+    return { svg, edges, nodes, dLabel, uVal, yVal, mid };
+  }
+
+  // the value each edge carries: in "weights" mode the matrix entry itself, in "impulse" mode the signal at step k
+  function edgeValue(e) {
+    const m = id.model;
+    if (g.mode === "weights") return e.kind === "A" ? m.A[e.i][e.j] : e.kind === "B" ? m.B[e.i] : e.kind === "C" ? m.C[e.i] : m.D;
+    const k = g.k;
+    if (e.kind === "A") return k > 0 ? m.A[e.i][e.j] * id.X[k - 1][e.j] : 0;
+    if (e.kind === "B") return k === 0 ? m.B[e.i] : 0;
+    if (e.kind === "C") return m.C[e.i] * id.X[k][e.i];
+    return k === 0 ? m.D : 0;
+  }
+
+  function paint() {
+    if (!graph) return;
+    const m = id.model;
+    const focus = g.hover ?? g.sel;
+    const lim = {};
+    const vals = graph.edges.map((e) => {
+      const v = edgeValue(e);
+      lim[e.kind] = Math.max(lim[e.kind] ?? 1e-300, Math.abs(v));
+      return v;
+    });
+    graph.edges.forEach((e, n) => {
+      const v = vals[n];
+      const t = Math.min(1, Math.abs(v) / lim[e.kind]);
+      const touches = focus != null && (e.i === focus || e.j === focus);
+      e.el.setAttribute("stroke", rgbCss(diverging(v, lim[e.kind])));
+      e.el.setAttribute("stroke-width", (e.kind === "D" ? 1.4 : touches ? 1.6 : 0.5) + (e.kind === "D" ? 2.6 : touches ? 2.2 : 1.6) * t);
+      e.el.classList.toggle("hl", touches);
+      e.el.classList.toggle("zero", v === 0);
+      if (touches || e.kind === "D") e.el.setAttribute("marker-end", `url(#${graph.mid})`);
+      else e.el.removeAttribute("marker-end");
+    });
+    graph.svg.classList.toggle("focus", focus != null);
+    const imp = g.mode === "impulse";
+    const xk = imp ? id.X[g.k] : null;
+    const xl = imp ? Math.max(1e-300, ...Array.from(xk, Math.abs)) : 1;
+    graph.nodes.forEach((n, i) => {
+      n.c.style.fill = imp ? rgbCss(diverging(xk[i], xl)) : "";
+      n.g.classList.toggle("on", i === focus);
+      n.g.classList.toggle("sel", i === g.sel);
+    });
+    graph.dLabel.textContent = imp ? `D·u(${g.k}) = ${fmt(edgeValue({ kind: "D" }), 3)}` : `D = ${fmt(m.D, 3)}`;
+    graph.uVal.textContent = imp ? `u(${g.k}) = ${g.k === 0 ? 1 : 0}` : "";
+    graph.yVal.textContent = imp ? `h(${g.k}) = ${fmt(id.hR[g.k], 4)}` : "";
+    drawInfo(focus);
+  }
+
+  // the focused neuron's own row of the state equation, with numbers
+  function drawInfo(i) {
+    if (i == null) {
+      graphInfo.innerHTML = `<p class="sub">${g.mode === "impulse" ? T.ctlImpulseHint(g.k, fmt(id.hR[g.k], 4)) : T.ctlInfoHint}</p>`;
+      return;
+    }
+    const m = id.model;
+    const { deg, idx } = id.res;
+    const n = i + 1;
+    const ins = [];
+    for (let q = i * deg; q < (i + 1) * deg; q++) if (idx[q] !== i) ins.push(idx[q]);
+    const terms = ins.map((j) => `${sgn(m.A[i][j])} ${fmt(Math.abs(m.A[i][j]), 3)}·x${sub(j + 1)}`).join(" ");
+    let html = `<p class="panel-title">${T.ctlState} x${sub(n)}${g.sel === i ? ` · ${T.ctlPinned}` : ""}</p>
+      <p class="mono ctl-eq">x${sub(n)}(t) = ${fmt(m.A[i][i], 3)}·x${sub(n)}(t−1) ${terms} ${sgn(m.B[i])} ${fmt(Math.abs(m.B[i]), 4)}·u(t)</p>
+      <p class="sub">${T.ctlRowNote(n, fmt(m.A[i][i], 3), ins.length, fmt(m.B[i], 4), fmt(m.C[i], 2))}</p>`;
+    if (g.mode === "impulse") html += `<p class="sub">${T.ctlRowImpulse(n, g.k, fmt(id.X[g.k][i], 4), fmt(m.C[i] * id.X[g.k][i], 4), fmt(id.hR[g.k], 4))}</p>`;
+    graphInfo.innerHTML = html;
   }
 
   compute();
@@ -214,6 +384,8 @@ export function initControl(plantRoot, identRoot, abcdRoot) {
 const SUBS = "₀₁₂₃₄₅₆₇₈₉";
 const sub = (n) => String(n).split("").map((c) => SUBS[c]).join("");
 const num = (v) => fmt(v, 3).replace("−", "-");
+const sgn = (v) => (v < 0 ? "−" : "+");
+const cfmt = (z, d) => `${fmt(z.re, d)} ${z.im < 0 ? "−" : "+"} ${fmt(Math.abs(z.im), d)}i`;
 const mat = (A) => `\\begin{bmatrix} ${A.map((r) => r.map(num).join(" & ")).join(" \\\\ ")} \\end{bmatrix}`;
 const col = (v) => `\\begin{bmatrix} ${Array.from(v).map(num).join(" \\\\ ")} \\end{bmatrix}`;
 const row = (v) => `\\begin{bmatrix} ${Array.from(v).map(num).join(" & ")} \\end{bmatrix}`;
@@ -316,7 +488,7 @@ const unit = (x, y) => {
 };
 
 // The z-plane: unit circle, plant poles as crosses, reservoir eigenvalues as dots.
-function zPlane({ crosses, dots, aria }) {
+function zPlane({ crosses, dots, rings = [], aria }) {
   const S = 240;
   const lim = 1.15;
   const P = (v) => S / 2 + (v / lim) * (S / 2 - 10);
@@ -332,7 +504,13 @@ function zPlane({ crosses, dots, aria }) {
   );
   const tipOf = (e) => `<span class="mono">z = ${fmt(e.re, 3)} ${e.im < 0 ? "−" : "+"} ${fmt(Math.abs(e.im), 3)}i<br>|z| = ${fmt(Math.hypot(e.re, e.im), 3)}</span>`;
   for (const e of dots) {
-    const c = s("circle", { class: "ev", cx: P(e.re), cy: Q(e.im), r: 3 });
+    const c = s("circle", { class: "ev", cx: P(e.re), cy: Q(e.im), r: e.r ?? 3 });
+    c.addEventListener("pointermove", (ev) => showTip(tipOf(e) + (e.extra ? `<br><span class="mono">${e.extra}</span>` : ""), ev));
+    c.addEventListener("pointerleave", hideTip);
+    svg.append(c);
+  }
+  for (const e of rings) {
+    const c = s("circle", { class: "era", cx: P(e.re), cy: Q(e.im), r: 9 });
     c.addEventListener("pointermove", (ev) => showTip(tipOf(e), ev));
     c.addEventListener("pointerleave", hideTip);
     svg.append(c);
