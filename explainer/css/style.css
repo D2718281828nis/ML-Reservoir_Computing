@@ -300,6 +300,72 @@ a.cell:hover { border-color: var(--accent); }
 .countbar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; gap: 2px; margin: 6px 0 2px; }
 .countbar i { display: block; min-width: 3px; }
 
+/* ───────────── Part 2: the flow view (after Transformer Explainer) ───────────── */
+.flow-scroll { overflow-x: auto; margin: 4px -4px 0; padding: 0 4px; }
+svg.flowviz { display: block; width: 100%; min-width: 760px; height: auto; overflow: visible; }
+.flowviz text { font: 11px var(--font); fill: var(--ink-2); }
+.flowviz .lane { font: 700 13px var(--font); fill: var(--ink); letter-spacing: .02em; }
+.flowviz .clabel { font: 600 11.5px var(--font); fill: var(--ink); }
+.flowviz .clabel.link { cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-strong); }
+.flowviz .csub { font: 10.5px var(--font); fill: var(--muted); }
+.flowviz .blabel { font: 10.5px var(--mono); fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.flowviz .out-val { font: 600 13px var(--mono); fill: var(--ink); }
+.flowviz .panel-bg { fill: var(--surface-2); }
+.flowviz .win-shade { fill: var(--s2); opacity: .14; }
+.flowviz .series-line { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+.flowviz .now-dot { fill: var(--s1); stroke: var(--surface); stroke-width: 2; }
+.flowviz .band { fill-opacity: .2; stroke-width: 1; }
+.flowviz .band.trained { fill-opacity: .3; stroke: none; }
+.flowviz .band.fixed { stroke: var(--line-strong); stroke-dasharray: 4 3; }
+.flowviz .band-flow { fill: none; stroke: var(--ink-2); stroke-width: 1.2; stroke-dasharray: 2 9; opacity: .35; }
+.flowviz.flowing .band-flow { animation: flow-dash .7s linear 1; opacity: .8; }
+@keyframes flow-dash { from { stroke-dashoffset: 44; } to { stroke-dashoffset: 0; } }
+.flowviz .cell { transition: fill .25s ease; }
+.flowviz .col-frame { fill: none; stroke: var(--line-strong); stroke-width: 1; }
+[data-comp="prev"] .col-frame, [data-comp="state"] .col-frame, [data-comp="u"] .col-frame { stroke-dasharray: 3 2; }
+.flowviz .sel-ring { fill: none; stroke: var(--accent); stroke-width: 2; }
+.flowviz .mark { fill: var(--accent); }
+.flowviz .hit { fill: transparent; }
+.flowviz .out-node { stroke-width: 2.5; }
+.flowviz .loop-path { fill: none; stroke: var(--s1); stroke-width: 2; stroke-dasharray: 5 4; }
+.flowviz .arrow-head { fill: var(--s1); }
+.flowviz .lens { cursor: pointer; }
+.flowviz .lens circle:first-child { fill: var(--surface); stroke: var(--accent); stroke-width: 1.4; }
+.flowviz .lens .glass { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+.flowviz .lens line { stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; }
+.flowviz .lens:hover circle:first-child, .flowviz .lens:focus-visible circle:first-child { fill: var(--accent-soft); }
+.flowviz [data-comp] { transition: opacity .25s ease; }
+.flowviz.touring [data-comp]:not(.hl) { opacity: .18; }
+.flowviz.touring [data-comp].hl .col-frame { stroke: var(--accent); stroke-width: 2; stroke-dasharray: none; }
+.tour-card {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 6px 14px; align-items: center;
+  margin: 4px 0 10px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--accent-soft); border-left: 3px solid var(--accent);
+}
+.tour-card[hidden] { display: none; }
+.tour-card p { margin: 0; font-size: 14.5px; color: var(--ink); }
+.tour-num { font: 600 12px var(--mono); color: var(--accent); }
+.tour-nav { display: flex; gap: 6px; }
+.flow-panel { margin-top: 8px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.step-card { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--surface); min-width: 0; }
+.step-card .snum { color: var(--accent); font-weight: 700; }
+.contrib { display: grid; grid-template-columns: max-content minmax(80px, 1fr) 4.6em; gap: 2px 10px; align-items: center; font-size: 12.5px; }
+.contrib .cname { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.contrib .cname.link { cursor: pointer; color: var(--accent); }
+.contrib .cname.total, .contrib .cval.total { font-weight: 700; color: var(--ink); }
+.contrib .ctrack { position: relative; height: 11px; }
+.contrib .czero { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--line-strong); }
+.contrib .cbar { position: absolute; top: 1px; bottom: 1px; border-radius: 2px; min-width: 1px; }
+.contrib .cbar.total { background: var(--ink); }
+.contrib .cval { font: 12px var(--mono); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+svg.tanh { width: 240px; max-width: 100%; height: auto; }
+.narrow-only { display: none; text-align: center; }
+@media (max-width: 760px) {
+  .narrow-only { display: block; }
+}
+@media (max-width: 640px) {
+  .tour-card { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* stacked small charts (neuron traces) */
 .minis-3 { display: grid; gap: 2px; }
 

@@ -208,5 +208,5 @@ export function perFrame(fn) {
 }
 
 const MS = LANG === "ru" ? ["мс", "с"] : ["ms", "s"];
-export const ms = (t) => (t < 1 ? `${t.toFixed(2)} ${MS[0]}` : t < 1000 ? `${t.toFixed(0)} ${MS[0]}` : `${(t / 1000).toFixed(1)} ${MS[1]}`);
+export const ms = (t) => (t < 1 ? `${t.toFixed(2)} ${MS[0]}` : t < 1000 ? `${t.toFixed(0)} ${MS[0]}` : `${(t / 1000).toFixed(t < 1e4 ? 1 : 0)} ${MS[1]}`);
 export const int = (n) => Math.round(n).toLocaleString(LANG_LOCALE);

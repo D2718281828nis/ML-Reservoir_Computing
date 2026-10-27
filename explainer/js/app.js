@@ -2,6 +2,7 @@
 
 import { loadJSON, placeholder, resetPalette } from "./util.js";
 import { T } from "./i18n.js";
+import { initFlow } from "./sec-flow.js";
 import { initFFN } from "./sec-ffn.js";
 import { initInside, initMemory } from "./sec-reservoir.js";
 import { initRace } from "./sec-race.js";
@@ -24,6 +25,7 @@ async function main() {
       fail([id], e);
     }
   };
+  boot("viz-flow", initFlow);
   boot("viz-ffn", initFFN);
   boot("viz-inside", initInside);
   boot("viz-memory", initMemory);

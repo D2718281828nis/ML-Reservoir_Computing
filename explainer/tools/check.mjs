@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { mackeyGlass, lorenz } from "../js/data.js";
 import { Reservoir, NGRC, spectralRadius, FFN } from "../js/models.js";
+import { flowSetup, explainFFN, explainESN } from "../js/core.js";
 import { ridge, applyReadout, mseGrad } from "../js/nn.js";
 
 const checks = JSON.parse(readFileSync(new URL("../assets/checks.json", import.meta.url), "utf8"));
@@ -110,6 +111,24 @@ function compare(label, got, want, tol = 1e-6, relative = false) {
     }
   }
   compare("FFN backprop vs finite differences", analytic, numeric, 2e-3);
+}
+
+// part 2: every number the flow view shows must be the models' own computation
+{
+  const flow = flowSetup();
+  flow.trainer.run(200, false); // a few epochs are enough to check the bookkeeping
+  const ts = [3001, 3150, 3600];
+  compare("flow view: FFN steps vs the network", ts.map((t) => explainFFN(flow, t).y), ts.map((t) => {
+    const w = Float64Array.from({ length: 20 }, (_, k) => flow.z[t - k]);
+    return flow.trainer.ffn.predict(w, 1)[0];
+  }), 1e-6);
+  const N = flow.res.N;
+  compare("flow view: ESN neuron updates vs the run", ts.map((t) => Array.from(explainESN(flow, t).x)), ts.map((t) => Array.from(flow.X.subarray(t * N, (t + 1) * N))), 1e-12);
+  compare("flow view: readout terms add up to ŷ", ts.map((t) => explainESN(flow, t).y), ts.map((t) => {
+    let y = 0;
+    for (let k = 0; k < flow.p; k++) y += flow.F[t * flow.p + k] * flow.B[k];
+    return y;
+  }), 1e-9);
 }
 
 console.log(`\n${failed ? `${failed} check(s) FAILED` : "all checks passed"} · largest absolute difference ${worst.toExponential(2)}`);

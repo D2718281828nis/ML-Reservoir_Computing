@@ -355,3 +355,90 @@ function finishLorenz(run, ts, info) {
   const validLT = valids.reduce((a, b) => a + b, 0) / valids.length;
   return { pred, truth: truthAt(ts, LZ.steps), ts, valids, validLT, ...info };
 }
+
+// ───────────── part 2: one forecast, followed through both networks ─────────────
+// A small FFN (window 20 → 16 tanh units → 1) and a 100-neuron ESN, both forecasting Mackey–Glass 20 steps ahead.
+// explainFFN / explainESN return every intermediate value of one time step, for the flow view and its expanded views.
+export const FLOW = { L: 20, hidden: 16, N: 100, epochs: 120, lambda: null, esn: { N: 100, rho: 0.9, leak: 0.5, inScale: 0.5, bias: 0.2 } };
+
+export function flowSetup() {
+  const T = mgTask();
+  const trainer = new Trainer(T, FLOW.L, { hidden: [FLOW.hidden], seed: 3, epochs: FLOW.epochs });
+  const res = new Reservoir({ N: FLOW.N, seed: 2 });
+  const flow = { T, trainer, res, z: T.z };
+  refitFlowESN(flow, FLOW.esn, FLOW.lambda);
+  return flow;
+}
+
+// after training: keep the best-validation weights for good
+export function finishFlowFFN(flow) {
+  const { trainer } = flow;
+  if (trainer.best.snap) trainer.ffn.net.restore(trainer.best.snap);
+  flow.ffnErr = trainer.testError(trainer.current());
+}
+
+// lambda: a fixed ridge penalty, or null to choose it on validation
+export function refitFlowESN(flow, cfg, lambda = null) {
+  const { T, res } = flow;
+  const n = T.end - T.lead;
+  res.configure(cfg);
+  flow.X = res.run(T.z, n);
+  const { F, p } = res.features(T.z, flow.X, n);
+  const fit = fitReadout(F, p, T.Y, 1, T.train, T.val, lambda == null ? LAMBDAS : [lambda]);
+  flow.B = fit.B;
+  flow.lambda = fit.lambda;
+  flow.F = F;
+  flow.p = p;
+  const P = applyReadout(F, fit.B, p, 1, ...T.test);
+  flow.esnErr = nrmse(T.Y, P, T.test[1] - T.test[0], 1, 0, 0, T.test[0]);
+}
+
+export function explainFFN(flow, t) {
+  const [l1, l2] = flow.trainer.ffn.net.layers;
+  const { L } = FLOW;
+  const w = Float64Array.from({ length: L }, (_, k) => flow.z[t - k]); // newest first
+  const M = l1.nOut;
+  const terms = new Float64Array(M * L); // W₁[j,k] · w_k
+  const pre = new Float64Array(M);
+  const h = new Float64Array(M);
+  for (let j = 0; j < M; j++) {
+    let a = l1.b[j];
+    for (let k = 0; k < L; k++) {
+      const v = l1.W[j * L + k] * w[k];
+      terms[j * L + k] = v;
+      a += v;
+    }
+    pre[j] = a;
+    h[j] = Math.tanh(a);
+  }
+  const outTerms = Float64Array.from({ length: M }, (_, j) => l2.W[j] * h[j]);
+  const y = outTerms.reduce((a, b) => a + b, l2.b[0]);
+  return { t, w, terms, b1: l1.b, pre, h, outTerms, b2: l2.b[0], y, W1: l1.W, W2: l2.W, M, L };
+}
+
+export function explainESN(flow, t) {
+  const { res, X, B, p } = flow;
+  const { N, deg, idx, w, win, b, leak } = res;
+  const u = flow.z[t];
+  const prev = X.subarray((t - 1) * N, t * N);
+  const inTerm = Float64Array.from({ length: N }, (_, i) => win[i] * u);
+  const recTerms = new Float64Array(N * deg); // W[i, idx] · x_idx(t−1)
+  const pre = new Float64Array(N);
+  const act = new Float64Array(N);
+  const x = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    let a = b[i] + inTerm[i];
+    for (let k = 0; k < deg; k++) {
+      const v = w[i * deg + k] * prev[idx[i * deg + k]];
+      recTerms[i * deg + k] = v;
+      a += v;
+    }
+    pre[i] = a;
+    act[i] = Math.tanh(a);
+    x[i] = (1 - leak) * prev[i] + leak * act[i];
+  }
+  const f = flow.F.subarray(t * p, (t + 1) * p); // [1, u, x(t)]
+  const outTerms = Float64Array.from({ length: p }, (_, k) => B[k] * f[k]);
+  const y = outTerms.reduce((a, c) => a + c, 0);
+  return { t, u, prev: Float64Array.from(prev), inTerm, recTerms, idx, deg, bias: b, pre, act, x, leak, outTerms, f: Float64Array.from(f), y, N, p };
+}
