@@ -2,14 +2,14 @@
 
 An interactive page about feed-forward neural networks against reservoir computing for time-series forecasting:
 
-1. **Two answers.** Where the memory lives (a window or a recurrent state) and what is trained (every weight or only the readout): a 2 × 2 map of FFN, ELM, NG-RC, RNN and ESN.
-2. **Follow one forecast.** Both networks compute the same forecast, step by step, in the manner of [Transformer Explainer](https://poloclub.github.io/transformer-explainer/): one continuous data flow where every vector is a 1-D heatmap and a band is as wide as the vector it carries, expanded views of each part's math with live numbers (an FFN hidden unit, the FFN output, one reservoir neuron's update, the ESN readout), Step/Play, examples, live ρ, α and λ, and a guided tour. Then the loop unrolled in time (four steps of the same 100 neurons; on Step the columns slide, so x(t) visibly becomes x(t−1), with a ledger of one neuron's reads and writes), and the reservoir as an interactive directed graph (100 neurons, 1,000 links, force layout): hover for a neuron's incoming and outgoing links, and watch one change, a nudge to one neuron or one changed input, echo along the links and fade.
-3. **Feed-forward.** An MLP on a window of Mackey–Glass, trained live with Adam; its first-layer weights move as it learns, and a short window cannot hold the memory the series needs.
-4. **The reservoir.** Inside a 100-neuron echo state network: the echo state property (two runs from different starts merge, or don't), the roles of ρ, α and the input gain, and Jaeger's memory-capacity test against a window.
-5. **Head to head.** Linear AR, ELM, ESN and FFN on one task against the wall clock; the ELM separates "readout-only training" from "recurrence".
-6. **Forecasting.** A lab on daily electricity demand (Spain), an ECG and Mackey–Glass, with chronological splits, baselines (persistence, same day last week) and NRMSE by horizon; then closed-loop free runs.
-7. **NG-RC.** Next-generation reservoir computing: a feature counter, and NG-RC against an ESN on Lorenz-63, with valid time in Lyapunov times and ablations.
-8. **Takeaways** and the notebooks of this repository.
+1. **Two approaches to learning from past observations.** Where the memory lives (a window or a recurrent state) and what is trained (every weight or only the readout): a 2 × 2 map of FFN, ELM, NG-RC, RNN and ESN.
+2. **The forward pass of a single forecast.** Both networks compute the same forecast, step by step, in the manner of [Transformer Explainer](https://poloclub.github.io/transformer-explainer/): one continuous data flow where every vector is a 1-D heatmap and a band is as wide as the vector it carries, expanded views of each part's math with live numbers (an FFN hidden unit, the FFN output, one reservoir neuron's update, the ESN readout), Step/Play, examples, live ρ, α and λ, and a guided tour. Then the loop unrolled in time (four steps of the same 100 neurons; on Step the columns slide, so x(t) visibly becomes x(t−1), with a ledger of one neuron's reads and writes), and the reservoir as an interactive directed graph (100 neurons, 1,000 links, force layout): hover for a neuron's incoming and outgoing links, and watch one change, a nudge to one neuron or one changed input, echo along the links and fade.
+3. **Feed-forward networks.** An MLP on a window of Mackey–Glass, trained live with Adam; its first-layer weights move as it learns, and a short window cannot hold the memory the series needs.
+4. **Reservoir computing.** Inside a 100-neuron echo state network: the echo state property (two runs from different starts merge, or don't), the roles of ρ, α and the input gain, and Jaeger's memory-capacity test against a window.
+5. **Comparative evaluation.** Linear AR, ELM, ESN and FFN on one task against the wall clock; the ELM separates "readout-only training" from "recurrence".
+6. **Forecasting real-world time series.** A lab on daily electricity demand (Spain), an ECG and Mackey–Glass, with chronological splits, baselines (persistence, same day last week) and NRMSE by horizon; then closed-loop free runs.
+7. **Next-generation reservoir computing (NG-RC).** Next-generation reservoir computing: a feature counter, and NG-RC against an ESN on Lorenz-63, with valid time in Lyapunov times and ablations.
+8. **Conclusions** and the accompanying notebooks.
 
 **Live:** https://d2718281828nis.github.io/ML-Reservoir_Computing/ · in Russian: https://d2718281828nis.github.io/ML-Reservoir_Computing/ru/
 
