@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Резервуарные вычисления наглядно</title>
+  <meta name="description" content="Сеть прямого распространения против резервуарных вычислений (сети эхо-состояний, NG-RC) в прогнозировании временных рядов. Все модели обучаются прямо в браузере: память, свойство эхо-состояний, гонка на время, реальные данные и хаотические системы.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="alternate" hreflang="en" href="https://d2718281828nis.github.io/ML-Reservoir_Computing/">
+  <link rel="alternate" hreflang="ru" href="https://d2718281828nis.github.io/ML-Reservoir_Computing/ru/">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234338ca'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='1.6'%3E%3Cpath d='M9 11l7 -3l7 4l-2 8l-8 3l-5 -5z'/%3E%3Cpath d='M9 11l12 9M16 8l-3 15'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Ccircle cx='9' cy='11' r='2'/%3E%3Ccircle cx='16' cy='8' r='2'/%3E%3Ccircle cx='23' cy='12' r='2'/%3E%3Ccircle cx='21' cy='20' r='2'/%3E%3Ccircle cx='13' cy='23' r='2'/%3E%3Ccircle cx='8' cy='18' r='2'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+  <script async id="katex-js" src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="../css/style.css">
+  <script type="module" src="../js/app.js"></script>
+</head>
+<body>
+
+<div class="file-warning" id="file-warning" hidden>
+  <b>Интерактивные части здесь не работают.</b> Страница открыта как локальный файл (<code>file://</code>), а в этом режиме браузеры блокируют её скрипты.
+  Запустите сервер: <code>python3 -m http.server 8000</code> в папке <code>explainer/</code> и откройте
+  <a href="http://localhost:8000/ru/">http://localhost:8000/ru/</a>, или откройте <a href="https://d2718281828nis.github.io/ML-Reservoir_Computing/ru/">опубликованную страницу</a>.
+</div>
+<script>if (location.protocol === "file:") document.getElementById("file-warning").hidden = false;</script>
+
+<header class="topbar" id="top">
+  <div class="topbar-inner">
+    <a class="brand" href="#">Резервуарные вычисления <span>наглядно</span></a>
+    <nav class="pipeline" id="pipeline" aria-label="Разделы">
+      <a href="#two-map">карта</a>
+      <span class="arrow">→</span>
+      <a href="#ffn-live">FFN</a>
+      <span class="arrow">→</span>
+      <a href="#res-inside">резервуар</a><a href="#res-memory">память</a>
+      <span class="arrow">→</span>
+      <a href="#race-live">гонка</a>
+      <span class="arrow">→</span>
+      <a href="#fc-lab">прогноз</a><a href="#fc-free">свободный ход</a>
+      <span class="arrow">→</span>
+      <a href="#ng-count">NG-RC</a><a href="#ng-lorenz">Лоренц</a>
+    </nav>
+    <a class="top-link" href="https://github.com/D2718281828nis/ML-Reservoir_Computing" title="Исходный код и ноутбуки">GitHub</a>
+    <a class="lang-switch" id="lang-switch" href="../" hreflang="en" lang="en" title="English version">EN</a>
+  </div>
+</header>
+
+<main>
+
+<section class="hero">
+  <p class="kicker">Сети прямого распространения · Сети эхо-состояний · NG-RC · считается в вашем браузере</p>
+  <h1>Обучать не сеть, а считывание</h1>
+  <p class="lede">
+    Есть два классических способа прогнозировать временной ряд нейросетью. Можно подать сети <em>окно</em> последних значений и обучить
+    все веса обратным распространением ошибки: это <em>сеть прямого распространения</em>. А можно пропустить ряд через большую рекуррентную сеть,
+    случайную и никогда не обучаемую, и подобрать только линейное <em>считывание</em> её состояния, одним решением задачи наименьших квадратов:
+    это <em>резервуарные вычисления</em>. Страница строит оба подхода прямо в браузере, на одних и тех же данных, и измеряет, что даёт эта разница и чего она стоит.
+  </p>
+  <nav class="map" aria-label="Части">
+    <a href="#s-two"><b><i>1</i>Два ответа</b><span>где живёт память и что обучается</span></a>
+    <a href="#s-ffn"><b><i>2</i>Прямое распространение</b><span>окно на входе, все веса обучаются вживую</span></a>
+    <a href="#s-res"><b><i>3</i>Резервуар</b><span>эхо, затухающая память, ρ и α</span></a>
+    <a href="#s-race"><b><i>4</i>Лицом к лицу</b><span>четыре модели, одна задача, один секундомер</span></a>
+    <a href="#s-fc"><b><i>5</i>Прогнозирование</b><span>реальные данные, честные эталоны, свободный ход</span></a>
+    <a href="#s-ng"><b><i>6</i>NG-RC</b><span>резервуар заменён задержками и их произведениями</span></a>
+    <a href="#s-end"><b><i>7</i>Выводы</b><span>что и когда выбирать; ноутбуки</span></a>
+  </nav>
+  <ul class="howto">
+    <li><b>Наводите</b> курсор на графики, чтобы читать значения. Каждая модель на странице обучается в вашем браузере, на обычном JavaScript; <code>tools/check.mjs</code> сверяет эту математику с numpy.</li>
+    <li>Цвета везде значат одно и то же:
+      <span class="key bg-s1"></span> ESN (резервуар), <span class="key bg-s2"></span> FFN, <span class="key bg-s3"></span> NG-RC, <span class="key bg-s4"></span> ELM,
+      <span class="key bg-ink"></span> истина, <span class="key bg-muted"></span> эталонные прогнозы.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────── 1. Два ответа ───────────────────────── -->
+<section class="stage" id="s-two">
+  <header class="stage-head">
+    <span class="stage-num">1</span>
+    <div>
+      <h2>Два способа учиться у прошлого</h2>
+      <p>Оба семейства отвечают на один вопрос: что будет дальше, если известны значения до сих пор? Расходятся они в двух вещах: где сеть хранит
+        память о прошлом и какие из её весов обучаются.</p>
+    </div>
+  </header>
+
+  <article class="step" id="two-idea">
+    <h3><span class="step-num">1.1</span> Один вопрос, два ответа</h3>
+    <div class="flows" aria-hidden="true">
+      <b>FFN</b>
+      <div class="flow">
+        <span class="node">окно <span class="tex" data-tex="z(t),\dots,z(t-L+1)">z(t)…z(t−L+1)</span><small>L чисел</small></span><span class="op">→</span>
+        <span class="node">скрытые слои<small>tanh</small><span class="tag train">обучаются</span></span><span class="op">→</span>
+        <span class="node">выход<span class="tag train">обучается</span></span><span class="op">→</span>
+        <span class="node accent">прогноз <span class="tex" data-tex="\hat y(t+h)">ŷ(t+h)</span></span>
+      </div>
+      <b>RC</b>
+      <div class="flow">
+        <span class="node">вход <span class="tex" data-tex="u(t)">u(t)</span><small>1 число за шаг</small></span><span class="op">→</span>
+        <span class="node fixed"><span class="tex" data-tex="W_{\text{in}}">W_in</span><span class="tag frozen">случайные, фикс.</span></span><span class="op">→</span>
+        <span class="node fixed loop">резервуар <span class="tex" data-tex="x(t)">x(t)</span><small>N чисел</small><span class="tag frozen">случайный, фикс.</span></span><span class="op">→</span>
+        <span class="node">считывание <span class="tex" data-tex="W_{\text{out}}">W_out</span><span class="tag train">обучается</span></span><span class="op">→</span>
+        <span class="node accent">прогноз <span class="tex" data-tex="\hat y(t+h)">ŷ(t+h)</span></span>
+      </div>
+    </div>
+    <div class="formula"><span class="tex" data-tex="\textbf{FFN: }\ \hat y(t+h) = f_\theta\big(z(t), z(t-1), \dots, z(t-L+1)\big), \qquad \theta \leftarrow \theta - \eta\,\nabla_\theta \tfrac1n \textstyle\sum_t \big(\hat y(t+h) - y(t+h)\big)^2">FFN: ŷ(t+h) = f_θ(окно), θ обучается градиентным спуском</span></div>
+    <div class="formula"><span class="tex" data-tex="\textbf{ESN: }\ x(t) = (1-\alpha)\,x(t-1) + \alpha \tanh\!\big(W_{\text{in}}\,u(t) + W x(t-1) + b\big), \qquad \hat y(t+h) = W_{\text{out}} \begin{bmatrix} 1 \\ u(t) \\ x(t) \end{bmatrix}">ESN: x(t) = (1−α) x(t−1) + α tanh(W_in u(t) + W x(t−1) + b), ŷ = W_out [1; u; x]</span></div>
+    <p>В FFN при обучении двигается каждый вес. Функция потерь невыпуклая, поэтому обучение идёт множеством мелких градиентных шагов, и разные сиды
+      приводят в разные места. В резервуаре, <i>сети эхо-состояний</i> (ESN) Егера (Jaeger, 2001), матрицы <span class="tex" data-tex="W_{\text{in}}">W_in</span> и
+      <span class="tex" data-tex="W">W</span> один раз выбираются случайно и замораживаются. Состояние <span class="tex" data-tex="x(t)">x(t)</span> становится длинной, нелинейной,
+      затухающей сводкой всего, что делал вход. Считывание — линейная регрессия на это состояние: выпуклая задача с единственным точным решением.</p>
+  </article>
+
+  <article class="step" id="two-map">
+    <h3><span class="step-num">1.2</span> Две разницы, а не одна</h3>
+    <p>«Прямое распространение против резервуара» объединяет два независимых выбора. Первый: <b>где живёт память</b>, в явном окне прошлых значений
+      или в состоянии рекуррентной системы. Второй: <b>что обучается</b>, все веса или только последний линейный слой. Все четыре сочетания — настоящие модели,
+      три из них строятся на этой странице.</p>
+    <div class="quad">
+      <span></span>
+      <span class="hd">обучаются все веса (backprop)</span>
+      <span class="hd">обучается только считывание (одно решение)</span>
+      <span class="rh">окно</span>
+      <a class="cell" href="#s-ffn"><b><span class="key bg-s2"></span>FFN / MLP</b><span>окно → обучаемые скрытые слои → выход · часть 2</span></a>
+      <a class="cell" href="#s-race"><b><span class="key bg-s4"></span>ELM <span class="key bg-s3"></span>NG-RC</b><span>окно → <i>фиксированные</i> случайные или полиномиальные признаки → считывание · части 4, 6</span></a>
+      <span class="rh">состояние</span>
+      <span class="cell dim"><b>RNN, LSTM, GRU</b><span>рекуррентные, обучаются во времени · здесь не строятся; см. ноутбуки 01 и 02</span></span>
+      <a class="cell" href="#s-res"><b><span class="key bg-s1"></span>ESN, LSM</b><span>рекуррентные, случайные и фиксированные → считывание · часть 3</span></a>
+    </div>
+    <div class="callout"><p>Эти две разницы стоит держать раздельно: они дают разное. В части 4 углы карты соревнуются друг с другом. <b>ELM</b>
+      (машина экстремального обучения: окно через фиксированный случайный скрытый слой) отличается от FFN только тем, <i>что обучается</i>, а от ESN —
+      только тем, <i>где живёт память</i>. Поэтому гонка проверяет каждую разницу по отдельности.</p></div>
+  </article>
+</section>
+
+<!-- ───────────────────────── 2. FFN ───────────────────────── -->
+<section class="stage" id="s-ffn">
+  <header class="stage-head">
+    <span class="stage-num">2</span>
+    <div>
+      <h2>Сеть прямого распространения: функция от окна</h2>
+      <p>У сети прямого распространения нет собственной памяти. Всё, что она знает о прошлом, лежит в её входном окне, а длину окна
+        <span class="tex" data-tex="L">L</span> вы выбираете до начала обучения.</p>
+    </div>
+  </header>
+
+  <article class="step" id="ffn-model">
+    <h3><span class="step-num">2.1</span> Окно на входе, прогноз на выходе</h3>
+    <div class="formula"><span class="tex" data-tex="w(t) = \big[z(t), \dots, z(t-L+1)\big], \quad h_1 = \tanh(W_1 w + b_1), \quad h_2 = \tanh(W_2 h_1 + b_2), \quad \hat y(t+h) = W_3 h_2 + b_3">w = окно, h₁ = tanh(W₁w + b₁), h₂ = tanh(W₂h₁ + b₂), ŷ = W₃h₂ + b₃</span></div>
+    <p>Обучение — градиентный спуск по мини-батчам с Adam по среднеквадратичной ошибке. Обратное распространение вычисляет, как потери зависят от каждого веса,
+      и каждый вес делает маленький шаг. При <span class="tex" data-tex="L = 20">L = 20</span> и двух слоях по 32 нейрона это 1761 вес, и все они обучаются.</p>
+    <p>Данные частей 2–4 — ряд <b>Макки — Гласса</b>, классический тест для прогноза хаотических систем. Это уравнение с запаздыванием, значения берутся
+      раз в единицу времени, квазипериод около 50 шагов:</p>
+    <div class="formula"><span class="tex" data-tex="\frac{dx}{dt} = \frac{0.2\,x(t-17)}{1 + x(t-17)^{10}} - 0.1\,x(t)">dx/dt = 0,2 x(t−17) / (1 + x(t−17)¹⁰) − 0,1 x(t)</span></div>
+    <p>Разбиение по времени: обучение на первых 2500 точках, выбор лучшей эпохи (или λ) на следующих 500, ошибка на последних 1000. Ошибка — <b>NRMSE</b>:
+      среднеквадратичная ошибка, делённая на стандартное отклонение истины. 1 значит «не лучше, чем предсказывать среднее», 0,01 — 1% от разброса сигнала.</p>
+  </article>
+
+  <article class="step" id="ffn-live">
+    <h3><span class="step-num">2.2</span> Вживую: обучите её и посмотрите, как двигается каждый вес</h3>
+    <p>Задача — значение <b>через 20 шагов</b>. На один шаг вперёд слишком просто: обычная линейная модель по окну уже даёт NRMSE 0,0006.
+      Нажмите <b>Обучить</b>. Тепловая карта — первый слой: строка на скрытый нейрон, столбец на позицию в окне. Меняется каждая клетка.</p>
+    <div class="viz" id="viz-ffn"></div>
+    <div class="callout"><p><b>Окно — вся её память.</b> В уравнение Макки — Гласса возвращается <span class="tex" data-tex="x(t-17)">x(t−17)</span>. Поставьте
+      <span class="tex" data-tex="L = 3">L = 3</span> и обучите: NRMSE на тесте останется около 0,18, что бы сеть ни делала, потому что нужной информации просто нет на входе.
+      <span class="tex" data-tex="L = 10">L = 10</span> даёт около 0,017, <span class="tex" data-tex="L = 20">L = 20</span> — около 0,010. <b>Сброс</b> запускает другой сид: функция потерь невыпуклая,
+      поэтому каждый прогон заканчивается немного в другом месте.</p></div>
+  </article>
+</section>
+
+<!-- ───────────────────────── 3. Резервуар ───────────────────────── -->
+<section class="stage" id="s-res">
+  <header class="stage-head">
+    <span class="stage-num">3</span>
+    <div>
+      <h2>Резервуар: случайная рекуррентная сеть, которую никто не обучает</h2>
+      <p>Егер (Jaeger, 2001, сети эхо-состояний) и Маасс, Начлегер и Маркрам (Maass, Natschläger, Markram, 2002, жидкостные машины) независимо предложили
+        один и тот же приём. Взять большую рекуррентную сеть, но не обучать её: выбрать веса случайно, отмасштабировать так, чтобы сеть была устойчивой,
+        и позволить входу её раскачивать. Обучение подбирает только линейное считывание.</p>
+    </div>
+  </header>
+
+  <article class="step" id="res-model">
+    <h3><span class="step-num">3.1</span> Обновление, три ручки и считывание</h3>
+    <div class="formula"><span class="tex" data-tex="x(t) = (1-\alpha)\,x(t-1) + \alpha \tanh\!\big(W_{\text{in}}\,u(t) + W x(t-1) + b\big)">x(t) = (1−α) x(t−1) + α tanh(W_in u(t) + W x(t−1) + b)</span></div>
+    <p>Резервуар определяют три числа:</p>
+    <ul>
+      <li><b>спектральный радиус</b> <span class="tex" data-tex="\rho">ρ</span>, наибольший модуль <span class="tex" data-tex="|\lambda|">|λ|</span> среди собственных значений <span class="tex" data-tex="W">W</span>: насколько сильно состояние отзывается само на себя;</li>
+      <li><b>коэффициент утечки</b> <span class="tex" data-tex="\alpha">α</span>: насколько быстро реагирует состояние (малое α — медленное, гладкое состояние);</li>
+      <li><b>усиление входа</b>: насколько сильно вход загоняет нейроны в нелинейную часть tanh.</li>
+    </ul>
+    <p>Здесь каждый нейрон слушает 10 случайных других. <span class="tex" data-tex="W">W</span> выбирается один раз и масштабируется до нужного ρ. Страница оценивает ρ степенным методом,
+      а <code>tools/check.mjs</code> сравнивает оценку с собственными значениями из numpy. Затем подбирается только считывание:</p>
+    <div class="formula"><span class="tex" data-tex="W_{\text{out}} = \arg\min_{W} \frac1n \sum_t \big\lVert W f(t) - y(t) \big\rVert^2 + \lambda \lVert W \rVert^2 = Y F^{\top}\big(F F^{\top} + \lambda n I\big)^{-1}, \qquad f(t) = \big[1;\ u(t);\ x(t)\big]">W_out = Y Fᵀ (F Fᵀ + λnI)⁻¹, f(t) = [1; u(t); x(t)]</span></div>
+    <p>Это гребневая регрессия: одно решение линейной системы с матрицей <span class="tex" data-tex="(N+2)\times(N+2)">(N+2)×(N+2)</span>. λ выбирается на валидации, как в любой регрессии.</p>
+  </article>
+
+  <article class="step" id="res-inside">
+    <h3><span class="step-num">3.2</span> Вживую: внутри резервуара</h3>
+    <p>100 нейронов, которых раскачивает ряд Макки — Гласса. Две копии одного резервуара стартуют из разных случайных состояний (прогоны A и B). Нижний правый
+      график показывает расстояние между ними в логарифмической шкале.</p>
+    <div class="viz" id="viz-inside"></div>
+    <p>При исходных настройках прогоны сливаются примерно через 80 шагов, вплоть до машинной точности. Это <b>свойство эхо-состояний</b>. Резервуар забывает,
+      откуда стартовал, и его состояние становится функцией только недавней истории входа. Поэтому считывание, обученное на одном участке данных, работает и на другом.
+      И поэтому при обучении пропускают первые шаги — <i>прогрев</i> (washout), пока состояние ещё зависит от <span class="tex" data-tex="x(0)">x(0)</span>.</p>
+    <div class="callout warn"><p><b>«ρ &lt; 1» — эмпирическое правило, а не условие.</b> При ρ = 1,2 прогоны всё ещё сливаются (примерно за 180 шагов), при ρ = 1,5 — уже нет за 300.
+      Теперь поставьте ρ = 2 и усиление входа 2. Сильный вход насыщает нейроны, и прогоны снова сливаются, примерно за 200 шагов. Есть ли у резервуара
+      свойство эхо-состояний, зависит от резервуара <i>и</i> его входа вместе.</p></div>
+  </article>
+
+  <article class="step" id="res-memory">
+    <h3><span class="step-num">3.3</span> Память: окно, которое не нужно выбирать</h3>
+    <p>Подадим на резервуар белый шум и для каждой задержки <span class="tex" data-tex="k">k</span> обучим линейное считывание, которое восстанавливает <span class="tex" data-tex="u(t-k)">u(t−k)</span> по состоянию в момент
+      <span class="tex" data-tex="t">t</span>. Это задача памяти Егера (2002). <span class="tex" data-tex="r^2 = 1">r² = 1</span> — идеальное воспроизведение, 0 — никакого. Окно из
+      <span class="tex" data-tex="L">L</span> значений точно помнит задержки, которые в него входят, и ничего дальше.</p>
+    <div class="viz" id="viz-memory"></div>
+    <p>Память резервуара затухает, а не обрывается. При N = 100, ρ = 0,9, α = 1 и малом усилении входа её <b>ёмкость</b>
+      <span class="tex" data-tex="\sum_k r^2(k)">Σ r²(k)</span> около 30; теоретический предел — N. При ρ = 0,99 она растёт примерно до 34. Поднимите усиление входа до 1, и нелинейность
+      съедает память (около 12). Уменьшите α до 0,3, и состояние становится медленным и гладким, быстрые детали теряются (около 11). Резервуар меняет точное
+      воспроизведение на длинную, затухающую, нелинейную сводку, зато <span class="tex" data-tex="L">L</span> выбирать не нужно.</p>
+  </article>
+</section>
+
+<!-- ───────────────────────── 4. Гонка ───────────────────────── -->
+<section class="stage interlude" id="s-race">
+  <header class="stage-head">
+    <span class="stage-num">4</span>
+    <div>
+      <h2>Лицом к лицу <small>одна задача · один секундомер</small></h2>
+      <p>Четыре модели на одной задаче: Макки — Гласс на 20 шагов вперёд, те же разбиения. Линейная AR, ELM и ESN обучаются только в считывании,
+        каждая одним решением гребневой регрессии. FFN обучает все веса 150 эпох.</p>
+    </div>
+  </header>
+
+  <article class="step" id="race-live">
+    <h3><span class="step-num">4.1</span> Гонка</h3>
+    <p>Нажмите <b>Начать гонку</b>. Каждая точка — обучение за один шаг, поставленная в момент, когда оно закончилось. Кривая — ошибка FFN на тесте по ходу
+      обучения. Пунктир отмечает ошибку, до которой FFN предстоит дойти. Запустите несколько сидов: разброс между ними — цена невыпуклой функции потерь.</p>
+    <div class="viz" id="viz-race"></div>
+  </article>
+
+  <article class="step" id="race-read">
+    <h3><span class="step-num">4.2</span> Что показывает гонка</h3>
+    <ul>
+      <li><b>Обучение одного считывания быстрое, и здесь ещё и точное.</b> ESN и ELM достигают NRMSE на тесте около 0,0004–0,0005 примерно за
+        0,1–0,2 с. FFN нужно около 2 с, чтобы дойти примерно до 0,010. Те же данные, то же разбиение для валидации.</li>
+      <li><b>Скорость даёт способ обучения, а не рекуррентность.</b> ELM получает ровно тот же вход, что и FFN, — окно, и почти так же точна, как ESN.
+        Быстрой её делает то, что скрытый слой случайный и фиксированный, а значит, остаётся выпуклая задача.</li>
+      <li><b>Рекуррентность даёт память без окна.</b> Поставьте <span class="tex" data-tex="L = 3">L = 3</span>. Все оконные модели проваливаются (FFN ≈ 0,18, ELM ≈ 0,13,
+        линейная ≈ 0,60), а ESN не меняется: окна у неё никогда не было.</li>
+      <li><b>Одних линейных признаков мало.</b> Линейная AR на том же окне получает около 0,52. Точность берётся из множества нелинейных случайных признаков.</li>
+    </ul>
+    <div class="callout"><p><b>Почему тогда не всё делают на резервуарах?</b> Градиентное обучение масштабируется на глубокие сети и большие данные. Оно само
+      выучивает признаки, а случайный резервуар может лишь надеяться, что нужные окажутся среди его случайных. Оно справляется и со входами вроде изображений и текста,
+      где фиксированная случайная проекция — слабое априорное предположение. Резервуары хороши на низкоразмерных сигналах динамических систем, на малых данных
+      и там, где обучение должно быть дешёвым или идти в физическом «железе» (оптические, электронные, механические системы в роли резервуара).</p></div>
+  </article>
+</section>
+
+<!-- ───────────────────────── 5. Прогнозирование ───────────────────────── -->
+<section class="stage" id="s-fc">
+  <header class="stage-head">
+    <span class="stage-num">5</span>
+    <div>
+      <h2>Прогноз реального временного ряда</h2>
+      <p>Прогнозу можно доверять настолько, насколько честна его проверка. В этой части те же модели работают на двух реальных рядах из этого репозитория
+        и на ряде Макки — Гласса, с соблюдением шагов, которые делают прогноз честным.</p>
+    </div>
+  </header>
+
+  <article class="step" id="fc-setup">
+    <h3><span class="step-num">5.1</span> Рецепт</h3>
+    <ol>
+      <li><b>Делите по времени:</b> обучение, затем валидация, затем тест. Никогда не перемешивайте через границы: прогноз не должен видеть будущее.</li>
+      <li><b>Масштабируйте только по обучающей части</b> (её среднее и стандартное отклонение) и применяйте то же преобразование к остальному.</li>
+      <li><b>Отбросьте прогрев резервуара</b> (здесь первые 50 шагов), пока его состояние зависит от <span class="tex" data-tex="x(0) = 0">x(0) = 0</span>.</li>
+      <li><b>Выбирайте гиперпараметры на валидации</b> (λ, лучшую эпоху FFN), а на тест смотрите один раз.</li>
+      <li><b>Обыграйте эталоны:</b> <i>персистентность</i> <span class="tex" data-tex="\hat y(t+h) = z(t)">ŷ(t+h) = z(t)</span> и <i>сезонный наивный</i> прогноз, если у ряда есть сезон
+        (тот же день неделю назад). Модель, которая их не обыгрывает, не прогнозирует.</li>
+      <li><b>Прогнозируйте все горизонты сразу</b> (прямой многошаговый прогноз): один столбец считывания или один выход FFN на каждый горизонт <span class="tex" data-tex="h">h</span>.</li>
+    </ol>
+    <div class="formula"><span class="tex" data-tex="\mathrm{NRMSE}_h = \frac{\sqrt{\tfrac1n \sum_t \big(\hat y(t+h) - y(t+h)\big)^2}}{\operatorname{std}\big(y(t+h)\big)}">NRMSE_h = RMSE_h / std(y)</span></div>
+  </article>
+
+  <article class="step" id="fc-lab">
+    <h3><span class="step-num">5.2</span> Вживую: лаборатория прогноза</h3>
+    <p>Выберите ряд. ESN, линейная AR и эталоны подбираются сразу, FFN обучается по запросу (несколько секунд). Ползунки ρ и α переобучают ESN
+      на лету. Двигайте начало прогноза по тестовому периоду.</p>
+    <div class="viz" id="viz-lab"></div>
+    <p>На что смотреть:</p>
+    <ul>
+      <li><b>Энергопотребление.</b> Все обучаемые модели обыгрывают оба эталона: с большим запасом на завтра (NRMSE ≈ 0,34–0,38 против 0,70 у «того же дня неделю назад»)
+        и немного на неделю вперёд (≈ 0,60 против 0,68). FFN чуть впереди, ESN наравне с линейной моделью. Самые большие ошибки приходятся на праздники, о которых ни одна модель здесь не знает.</li>
+      <li><b>ЭКГ.</b> ESN лучше всех на несколько миллисекунд вперёд (0,08 против 0,20 у FFN на 4 мс). Дальше модели близки. Здесь на 100 мс впереди FFN
+        (0,55 против 0,61); при других случайных начальных значениях, как в ноутбуке 00, впереди ESN. Ни одна модель не угадывает точно, когда начнётся следующий удар.
+        Этот разброс (интервалы между ударами от 733 до 790 мс) и составляет основную часть ошибки.</li>
+      <li><b>Макки — Гласс.</b> Детерминированная система — родная стихия резервуара. ESN даёт 0,010 на 50 шагов вперёд, FFN — 0,09.</li>
+    </ul>
+    <div class="callout"><p>Читайте таблицу, а не только график. На шумных реальных данных резервуар конкурентоспособен, но не волшебен. Зато он всегда выигрывает по времени обучения:
+      десятки–сотни миллисекунд против секунд обучения.</p></div>
+  </article>
+
+  <article class="step" id="fc-free">
+    <h3><span class="step-num">5.3</span> Замкнутый контур: прогноз в свободном ходе</h3>
+    <div class="flows" aria-hidden="true">
+      <b>обучение</b>
+      <div class="flow">
+        <span class="node">истинное <span class="tex" data-tex="u(t)">u(t)</span></span><span class="op">→</span>
+        <span class="node">модель</span><span class="op">→</span>
+        <span class="node">ŷ(t+1)<small>сравнивается с y(t+1)</small></span>
+      </div>
+      <b>свободный ход</b>
+      <div class="flow">
+        <span class="node accent">ŷ(t)</span><span class="op">→</span>
+        <span class="node loop">модель</span><span class="op">→</span>
+        <span class="node accent">ŷ(t+1)<small>становится следующим входом</small></span>
+      </div>
+    </div>
+    <p>Для прогноза далеко вперёд можно обучить одношаговую модель и подавать каждый её прогноз обратно на вход. Модель превращается в автономную динамическую
+      систему, которая подражает настоящей, и ошибки накапливаются. Именно в такой постановке резервуары прославились (Jaeger, Haas, <i>Science</i>, 2004).</p>
+    <div class="viz" id="viz-free"></div>
+    <p>В зависимости от сида ESN держится в пределах 0,2 стандартного отклонения от истины примерно 540–860 шагов (10–17 квазипериодов). FFN, обученная на той же
+      одношаговой задаче с ранней остановкой, — примерно 65–150. Обратите внимание, как выбирается λ для ESN: по длине верного свободного хода на валидации.
+      λ с лучшей одношаговой ошибкой часто слишком мало, чтобы модель оставалась устойчивой в свободном ходе.</p>
+  </article>
+</section>
+
+<!-- ───────────────────────── 6. NG-RC ───────────────────────── -->
+<section class="stage" id="s-ng">
+  <header class="stage-head">
+    <span class="stage-num">6</span>
+    <div>
+      <h2>NG-RC: резервуар без резервуара</h2>
+      <p>Готье, Боллт, Гриффит и Барбоза (Gauthier, Bollt, Griffith, Barbosa, 2021) спросили, что на самом деле даёт случайный резервуар. Их
+        <i>резервуарные вычисления следующего поколения</i> обходятся без него. «Состояние» — несколько задержанных входов и их произведения: нелинейная векторная
+        авторегрессия (NVAR). Этот метод используют большинство ноутбуков репозитория.</p>
+    </div>
+  </header>
+
+  <article class="step" id="ng-idea">
+    <h3><span class="step-num">6.1</span> Признаки: задержки и их произведения</h3>
+    <div class="formula"><span class="tex" data-tex="\mathbb O_{\text{lin}}(t) = \big[v(t),\ v(t-s),\ \dots,\ v(t-(k-1)s)\big], \qquad \mathbb O_{\text{total}} = c \oplus \mathbb O_{\text{lin}} \oplus \big\lceil \mathbb O_{\text{lin}} \otimes \mathbb O_{\text{lin}} \big\rceil, \qquad v(t+1) = v(t) + W_{\text{out}}\, \mathbb O_{\text{total}}(t)">O_lin = [v(t), v(t−s), …], O_total = c ⊕ O_lin ⊕ ⌈O_lin ⊗ O_lin⌉, v(t+1) = v(t) + W_out O_total</span></div>
+    <p><span class="tex" data-tex="\lceil \otimes \rceil">⌈⊗⌉</span> — уникальные произведения (мономы). Считывание предсказывает шаг <span class="tex" data-tex="v(t+1) - v(t)">v(t+1) − v(t)</span>,
+      как один шаг численного интегратора. Снова гребневая регрессия, но теперь на нескольких десятках выбранных признаков вместо сотен случайных.</p>
+  </article>
+
+  <article class="step" id="ng-count">
+    <h3><span class="step-num">6.2</span> Сколько признаков?</h3>
+    <p>Посчитайте их для любого числа каналов <span class="tex" data-tex="d">d</span>, отводов <span class="tex" data-tex="k">k</span> и степеней. Три примера — конфигурации из ноутбуков этого репозитория.</p>
+    <div class="viz" id="viz-count"></div>
+    <p>Число признаков растёт быстро. Кубические члены от 4 значений — уже 20, от 10 значений — 220. Поэтому NG-RC подходит для низкоразмерных систем.</p>
+  </article>
+
+  <article class="step" id="ng-lorenz">
+    <h3><span class="step-num">6.3</span> Вживую: Лоренц-63, NG-RC против ESN</h3>
+    <p>Система Лоренца (<span class="tex" data-tex="\sigma = 10,\ \rho = 28,\ \beta = 8/3">σ = 10, ρ = 28, β = 8/3</span>, <span class="tex" data-tex="\Delta t = 0.025">Δt = 0,025</span>) хаотична: близкие состояния расходятся в
+      <span class="tex" data-tex="e">e</span> раз за каждое <b>ляпуновское время</b>, <span class="tex" data-tex="1/0.906 \approx 1.1">1/0,906 ≈ 1,1</span> единицы времени, или 44 шага. Обе модели учатся на одних и тех же точках, потом идут в свободный ход.</p>
+    <div class="viz" id="viz-lorenz"></div>
+    <p>На 400 точках обучения NG-RC в среднем остаётся верной около 4 ляпуновских времён, ESN — около 3,5. На 100 точках разрыв 3 против 1. NG-RC нужна
+      одна прошлая точка для старта (<span class="tex" data-tex="k-1 = 1">k − 1 = 1</span>) вместо 200 шагов прогрева у ESN, и у неё 84 обучаемых веса вместо 912.
+      Её преимущество — экономия данных, а не более высокий потолок. С 1000 точек и больше ESN догоняет и обгоняет: около 5 и 6 ляпуновских времён на 1000 и
+      4000 точках против 4,6 и 5,2 у NG-RC.</p>
+    <div class="callout"><p><b>Два опыта на удаление.</b> Снимите галочку <i>квадратичные</i>: останутся только линейные признаки, и прогноз развалится меньше чем за 0,1 ляпуновского времени.
+      Работу делает нелинейность. Поставьте <span class="tex" data-tex="k = 1">k = 1</span>: без задержки модель похожа на один шаг метода Эйлера и остаётся верной около одного ляпуновского времени.
+      <span class="tex" data-tex="k = 2">k = 2</span> работает как двухшаговый интегратор.</p></div>
+  </article>
+
+  <article class="step" id="ng-where">
+    <h3><span class="step-num">6.4</span> Где NG-RC на карте</h3>
+    <p>Вернитесь к карте из части 1. У NG-RC есть окно, как у FFN, и фиксированный слой признаков с обучаемым считыванием, как у ELM. Это родственник
+      резервуара из мира прямого распространения: резервуар, который можно записать формулой. На системе Лоренца он так хорош отчасти потому, что уравнения Лоренца
+      сами являются квадратичными полиномами. Системе, уравнения которой совсем не похожи на мономы низкой степени, нужно гораздо больше признаков — или настоящий резервуар.</p>
+  </article>
+</section>
+
+<!-- ───────────────────────── 7. Выводы ───────────────────────── -->
+<section class="stage" id="s-end">
+  <header class="stage-head">
+    <span class="stage-num">7</span>
+    <div>
+      <h2>Выводы</h2>
+      <p>Ни одно семейство не выигрывает везде. Каждое выигрывает там, где выполняются его предположения.</p>
+    </div>
+  </header>
+
+  <article class="step" id="end-choose">
+    <h3><span class="step-num">7.1</span> Что и когда</h3>
+    <div class="viz scroll-x">
+      <table class="tbl compare">
+        <thead><tr><th></th><th>FFN (backprop)</th><th>ESN (резервуар)</th><th>NG-RC</th></tr></thead>
+        <tbody>
+          <tr><td>Память</td><td>окно L, которое вы выбираете</td><td>затухающая, задаётся ρ, α, N</td><td>k отводов задержки</td></tr>
+          <tr><td>Обучение</td><td>итеративное, невыпуклое, зависит от сида</td><td>одно решение гребневой регрессии</td><td>одно решение гребневой регрессии</td></tr>
+          <tr><td>Время обучения на этой странице</td><td>секунды</td><td>0,05–0,3 с</td><td>меньше 2 мс</td></tr>
+          <tr><td>Ручки</td><td>L, слои, скорость обучения, эпохи</td><td>N, ρ, α, усиление входа, λ</td><td>k, s, степени, λ</td></tr>
+          <tr><td>Хороша на</td><td>сложных реальных данных, больших выборках</td><td>сигналах динамических систем, малых данных, физическом «железе»</td><td>низкоразмерной гладкой динамике, очень малых данных</td></tr>
+          <tr><td>Проваливается, когда</td><td>окно слишком короткое; данных слишком мало</td><td>потеряно свойство эхо-состояний; вход очень высокой размерности</td><td>переменных много (взрыв числа признаков)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Что бы вы ни выбрали, следуйте рецепту из 5.1: разбиение по времени, масштабирование только по обучению, валидация для каждого выбора и эталоны в каждой таблице.</p>
+  </article>
+
+  <article class="step" id="end-notebooks">
+    <h3><span class="step-num">7.2</span> Ноутбуки репозитория</h3>
+    <ul class="nb-list">
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/00_ffn_vs_reservoir_computing.ipynb" target="_blank" rel="noopener"><b>00 · FFN против резервуарных вычислений</b></a>: все опыты этой страницы на numpy, шаг за шагом. Начните с него.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/01_esn_lsm_rnn_sine_generator.ipynb" target="_blank" rel="noopener"><b>01 · ESN, LSM и RNN на генераторе синуса</b></a>: три модели для синуса с частотной модуляцией.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/02_esn_vs_lstm.ipynb" target="_blank" rel="noopener"><b>02 · ESN против LSTM</b></a>: ESN на numpy против LSTM на Keras, точность и время обучения.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/03_ngrc_forced_oscillator.ipynb" target="_blank" rel="noopener"><b>03 · NG-RC для вынужденного осциллятора</b></a>: полиномиальные признаки против NG-RC, ляпуновское время, неподвижные точки.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/04_ngrc_lorenz_double_scroll.ipynb" target="_blank" rel="noopener"><b>04 · NG-RC на системе Лоренца и двойной спирали</b></a>: опыты Готье и др. против классического резервуара.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/05_esn_lorenz_rescompy.ipynb" target="_blank" rel="noopener"><b>05 · ESN на системе Лоренца с rescompy</b></a>: та же система с библиотекой резервуаров.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/06_lsm_spiking_network.ipynb" target="_blank" rel="noopener"><b>06 · Жидкостная машина (LSM)</b></a>: импульсный резервуар на PyTorch, частоты разрядов и F–I-кривые.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/07_ecg_forecast_rc_library.ipynb" target="_blank" rel="noopener"><b>07 · Прогноз ЭКГ библиотекой резервуаров</b></a>: прогнозатор <code>reservoir_computing</code> на ЭКГ из части 5.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/08_ecg_forecast_esn_warmup.ipynb" target="_blank" rel="noopener"><b>08 · Прогноз ЭКГ с прогретой ESN</b></a>: окно на входе, окно на выходе, и почему важен прогрев.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/09_basins_of_attraction_duffing.ipynb" target="_blank" rel="noopener"><b>09 · Бассейны притяжения</b></a>: неподвижные точки и бассейны осциллятора Дуффинга, основы теории динамических систем.</li>
+    </ul>
+  </article>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>Литература: H. Jaeger, <i>The "echo state" approach to analysing and training recurrent neural networks</i>, GMD Report 148 (2001) и <i>Short term memory in echo state networks</i>, GMD Report 152 (2002) ·
+    W. Maass, T. Natschläger, H. Markram, <i>Real-time computing without stable states</i>, Neural Computation 14 (2002) ·
+    H. Jaeger, H. Haas, <i>Harnessing nonlinearity: predicting chaotic systems and saving energy in wireless communication</i>, Science 304 (2004) ·
+    M. Lukoševičius, <i>A practical guide to applying echo state networks</i> (2012) ·
+    G.-B. Huang, Q.-Y. Zhu, C.-K. Siew, <i>Extreme learning machine: theory and applications</i>, Neurocomputing 70 (2006) ·
+    D. J. Gauthier, E. Bollt, A. Griffith, W. A. S. Barbosa, <a href="https://doi.org/10.1038/s41467-021-25801-2" target="_blank" rel="noopener"><i>Next generation reservoir computing</i></a>, Nature Communications 12 (2021) ·
+    M. C. Mackey, L. Glass, <i>Oscillation and chaos in physiological control systems</i>, Science 197 (1977) · E. N. Lorenz, <i>Deterministic nonperiodic flow</i> (1963).</p>
+  <p>Данные: суточное энергопотребление Испании, 2014–2018 (<a href="https://www.kaggle.com/code/manualrg/daily-electricity-demand-forecast-machine-learning/data" target="_blank" rel="noopener">Kaggle</a>) и запись ЭКГ
+    (<a href="https://www.kaggle.com/datasets/denisandrikov/ecg-timeseries-for-prediction" target="_blank" rel="noopener">Kaggle</a>), обе в папке <code>dataset/</code> этого репозитория; ряды Макки — Гласса и Лоренца интегрируются на странице.</p>
+  <p>Исходники: <a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/tree/master/explainer" target="_blank" rel="noopener">explainer/</a> в D2718281828nis/ML-Reservoir_Computing.
+    <code>tools/build_assets.py</code> собирает файл данных, <code>tools/check.mjs</code> сверяет математику страницы с numpy. Оформление общее с
+    <a href="https://d2718281828nis.github.io/ML-Transformers/autoencoders/ru/" target="_blank" rel="noopener">«Автоэнкодерами наглядно»</a>.</p>
+</footer>
+
+<div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+</body>
+</html>

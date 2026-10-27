@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reservoir Computing Explainer</title>
+  <meta name="description" content="Feed-forward neural networks against reservoir computing (echo state networks, NG-RC) for time-series forecasting. Every model trains in your browser: memory, the echo state property, a race against the clock, real data and chaotic systems.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="alternate" hreflang="en" href="https://d2718281828nis.github.io/ML-Reservoir_Computing/">
+  <link rel="alternate" hreflang="ru" href="https://d2718281828nis.github.io/ML-Reservoir_Computing/ru/">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234338ca'/%3E%3Cg fill='none' stroke='%23fff' stroke-width='1.6'%3E%3Cpath d='M9 11l7 -3l7 4l-2 8l-8 3l-5 -5z'/%3E%3Cpath d='M9 11l12 9M16 8l-3 15'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Ccircle cx='9' cy='11' r='2'/%3E%3Ccircle cx='16' cy='8' r='2'/%3E%3Ccircle cx='23' cy='12' r='2'/%3E%3Ccircle cx='21' cy='20' r='2'/%3E%3Ccircle cx='13' cy='23' r='2'/%3E%3Ccircle cx='8' cy='18' r='2'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+  <script async id="katex-js" src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="css/style.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<div class="file-warning" id="file-warning" hidden>
+  <b>The interactive parts can't run here.</b> This page was opened as a local file (<code>file://</code>), and browsers block its scripts in that mode.
+  Serve the folder instead: run <code>python3 -m http.server 8000</code> inside <code>explainer/</code> and open
+  <a href="http://localhost:8000/">http://localhost:8000/</a>, or use the <a href="https://d2718281828nis.github.io/ML-Reservoir_Computing/">published page</a>.
+</div>
+<script>if (location.protocol === "file:") document.getElementById("file-warning").hidden = false;</script>
+
+<header class="topbar" id="top">
+  <div class="topbar-inner">
+    <a class="brand" href="#">Reservoir Computing <span>Explainer</span></a>
+    <nav class="pipeline" id="pipeline" aria-label="Sections">
+      <a href="#two-map">map</a>
+      <span class="arrow">→</span>
+      <a href="#ffn-live">FFN</a>
+      <span class="arrow">→</span>
+      <a href="#res-inside">reservoir</a><a href="#res-memory">memory</a>
+      <span class="arrow">→</span>
+      <a href="#race-live">race</a>
+      <span class="arrow">→</span>
+      <a href="#fc-lab">forecast</a><a href="#fc-free">free run</a>
+      <span class="arrow">→</span>
+      <a href="#ng-count">NG-RC</a><a href="#ng-lorenz">Lorenz</a>
+    </nav>
+    <a class="top-link" href="https://github.com/D2718281828nis/ML-Reservoir_Computing" title="Source code and notebooks">GitHub</a>
+    <a class="lang-switch" id="lang-switch" href="ru/" hreflang="ru" lang="ru" title="Русская версия">RU</a>
+  </div>
+</header>
+
+<main>
+
+<section class="hero">
+  <p class="kicker">Feed-forward networks · Echo state networks · NG-RC · computed in your browser</p>
+  <h1>Train the readout, not the network</h1>
+  <p class="lede">
+    There are two classic ways to forecast a time series with a neural network. You can hand a network a <em>window</em> of the last values and train
+    every weight with backpropagation: a <em>feed-forward network</em>. Or you can let the series drive a large recurrent network that is random and
+    never trained, and fit only a linear <em>readout</em> of its state, in one least-squares solve: <em>reservoir computing</em>. This page builds both
+    in your browser, on the same data, and measures what the difference buys and what it costs.
+  </p>
+  <nav class="map" aria-label="Parts">
+    <a href="#s-two"><b><i>1</i>Two answers</b><span>where memory lives, what gets trained</span></a>
+    <a href="#s-ffn"><b><i>2</i>Feed-forward</b><span>a window in, every weight trained live</span></a>
+    <a href="#s-res"><b><i>3</i>The reservoir</b><span>echoes, fading memory, ρ and α</span></a>
+    <a href="#s-race"><b><i>4</i>Head to head</b><span>four models, one task, one clock</span></a>
+    <a href="#s-fc"><b><i>5</i>Forecasting</b><span>real data, honest baselines, free runs</span></a>
+    <a href="#s-ng"><b><i>6</i>NG-RC</b><span>the reservoir replaced by delays and products</span></a>
+    <a href="#s-end"><b><i>7</i>Takeaways</b><span>which one when; the notebooks</span></a>
+  </nav>
+  <ul class="howto">
+    <li><b>Hover</b> charts to read values. Every model on this page is trained in your browser, in plain JavaScript. <code>tools/check.mjs</code> checks that math against numpy.</li>
+    <li>Colors keep their meaning on every chart:
+      <span class="key bg-s1"></span> ESN (reservoir), <span class="key bg-s2"></span> FFN, <span class="key bg-s3"></span> NG-RC, <span class="key bg-s4"></span> ELM,
+      <span class="key bg-ink"></span> truth, <span class="key bg-muted"></span> baselines.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────── 1. Two answers ───────────────────────── -->
+<section class="stage" id="s-two">
+  <header class="stage-head">
+    <span class="stage-num">1</span>
+    <div>
+      <h2>Two ways to learn from the past</h2>
+      <p>Both families answer the same question: given the values so far, what comes next? They disagree on two things: where the network keeps
+        its memory of the past, and which of its weights are learned.</p>
+    </div>
+  </header>
+
+  <article class="step" id="two-idea">
+    <h3><span class="step-num">1.1</span> Same question, two answers</h3>
+    <div class="flows" aria-hidden="true">
+      <b>FFN</b>
+      <div class="flow">
+        <span class="node">window <span class="tex" data-tex="z(t),\dots,z(t-L+1)">z(t)…z(t−L+1)</span><small>L numbers</small></span><span class="op">→</span>
+        <span class="node">hidden layers<small>tanh</small><span class="tag train">trained</span></span><span class="op">→</span>
+        <span class="node">output<span class="tag train">trained</span></span><span class="op">→</span>
+        <span class="node accent">forecast <span class="tex" data-tex="\hat y(t+h)">ŷ(t+h)</span></span>
+      </div>
+      <b>RC</b>
+      <div class="flow">
+        <span class="node">input <span class="tex" data-tex="u(t)">u(t)</span><small>1 number per step</small></span><span class="op">→</span>
+        <span class="node fixed"><span class="tex" data-tex="W_{\text{in}}">W_in</span><span class="tag frozen">random, fixed</span></span><span class="op">→</span>
+        <span class="node fixed loop">reservoir <span class="tex" data-tex="x(t)">x(t)</span><small>N numbers</small><span class="tag frozen">random, fixed</span></span><span class="op">→</span>
+        <span class="node">readout <span class="tex" data-tex="W_{\text{out}}">W_out</span><span class="tag train">trained</span></span><span class="op">→</span>
+        <span class="node accent">forecast <span class="tex" data-tex="\hat y(t+h)">ŷ(t+h)</span></span>
+      </div>
+    </div>
+    <div class="formula"><span class="tex" data-tex="\textbf{FFN: }\ \hat y(t+h) = f_\theta\big(z(t), z(t-1), \dots, z(t-L+1)\big), \qquad \theta \leftarrow \theta - \eta\,\nabla_\theta \tfrac1n \textstyle\sum_t \big(\hat y(t+h) - y(t+h)\big)^2">FFN: ŷ(t+h) = f_θ(window), θ trained by gradient descent</span></div>
+    <div class="formula"><span class="tex" data-tex="\textbf{ESN: }\ x(t) = (1-\alpha)\,x(t-1) + \alpha \tanh\!\big(W_{\text{in}}\,u(t) + W x(t-1) + b\big), \qquad \hat y(t+h) = W_{\text{out}} \begin{bmatrix} 1 \\ u(t) \\ x(t) \end{bmatrix}">ESN: x(t) = (1−α) x(t−1) + α tanh(W_in u(t) + W x(t−1) + b), ŷ = W_out [1; u; x]</span></div>
+    <p>In the FFN every weight moves during training. The loss is non-convex, so training takes many small gradient steps, and different seeds end in
+      different places. In the reservoir, the <i>echo state network</i> (ESN) of Jaeger (2001), <span class="tex" data-tex="W_{\text{in}}">W_in</span> and
+      <span class="tex" data-tex="W">W</span> are drawn at random once and frozen. The state <span class="tex" data-tex="x(t)">x(t)</span> becomes a long, nonlinear,
+      fading summary of everything the input has done. The readout is a linear regression on that state: a convex problem with one exact solution.</p>
+  </article>
+
+  <article class="step" id="two-map">
+    <h3><span class="step-num">1.2</span> Two differences, not one</h3>
+    <p>"Feed-forward vs reservoir" bundles two separate choices. One is <b>where the memory lives</b>: in an explicit window of past values, or in the state of a
+      recurrent system. The other is <b>what is trained</b>: every weight, or only the last linear layer. All four combinations are real models, and the page builds
+      three of them.</p>
+    <div class="quad">
+      <span></span>
+      <span class="hd">every weight trained (backprop)</span>
+      <span class="hd">only the readout trained (one solve)</span>
+      <span class="rh">window</span>
+      <a class="cell" href="#s-ffn"><b><span class="key bg-s2"></span>FFN / MLP</b><span>window → trained hidden layers → output · part 2</span></a>
+      <a class="cell" href="#s-race"><b><span class="key bg-s4"></span>ELM <span class="key bg-s3"></span>NG-RC</b><span>window → <i>fixed</i> random or polynomial features → readout · parts 4, 6</span></a>
+      <span class="rh">state</span>
+      <span class="cell dim"><b>RNN, LSTM, GRU</b><span>recurrent, trained through time · not built here; see notebooks 01 and 02</span></span>
+      <a class="cell" href="#s-res"><b><span class="key bg-s1"></span>ESN, LSM</b><span>recurrent, random and fixed → readout · part 3</span></a>
+    </div>
+    <div class="callout"><p>Keep the two differences apart, because they buy different things. Part 4 races the corners against each other. The <b>ELM</b>
+      (extreme learning machine: a window through a fixed random hidden layer) differs from the FFN only in <i>what is trained</i>, and from the ESN only in
+      <i>where the memory lives</i>. So the race tests each difference on its own.</p></div>
+  </article>
+</section>
+
+<!-- ───────────────────────── 2. FFN ───────────────────────── -->
+<section class="stage" id="s-ffn">
+  <header class="stage-head">
+    <span class="stage-num">2</span>
+    <div>
+      <h2>The feed-forward network: a function of a window</h2>
+      <p>A feed-forward network has no memory of its own. Everything it knows about the past is in its input window, and the window length
+        <span class="tex" data-tex="L">L</span> is a decision you make before training starts.</p>
+    </div>
+  </header>
+
+  <article class="step" id="ffn-model">
+    <h3><span class="step-num">2.1</span> Window in, forecast out</h3>
+    <div class="formula"><span class="tex" data-tex="w(t) = \big[z(t), \dots, z(t-L+1)\big], \quad h_1 = \tanh(W_1 w + b_1), \quad h_2 = \tanh(W_2 h_1 + b_2), \quad \hat y(t+h) = W_3 h_2 + b_3">w = window, h₁ = tanh(W₁w + b₁), h₂ = tanh(W₂h₁ + b₂), ŷ = W₃h₂ + b₃</span></div>
+    <p>Training is mini-batch gradient descent with Adam on the mean squared error. Backpropagation computes how the loss depends on every weight, and every
+      weight takes a small step. With <span class="tex" data-tex="L = 20">L = 20</span> and two layers of 32 units that is 1,761 weights, all learned.</p>
+    <p>The data for parts 2–4 is the <b>Mackey–Glass</b> series, a classic benchmark for chaotic forecasting. It comes from a delay equation, sampled once per
+      time unit; its quasi-period is about 50 steps:</p>
+    <div class="formula"><span class="tex" data-tex="\frac{dx}{dt} = \frac{0.2\,x(t-17)}{1 + x(t-17)^{10}} - 0.1\,x(t)">dx/dt = 0.2 x(t−17) / (1 + x(t−17)¹⁰) − 0.1 x(t)</span></div>
+    <p>Splits are by time: train on the first 2,500 points, choose the best epoch (or λ) on the next 500, report the error on the last 1,000. The error is
+      <b>NRMSE</b>: root-mean-square error divided by the standard deviation of the truth. 1 means "no better than predicting the mean", 0.01 means 1% of the signal's spread.</p>
+  </article>
+
+  <article class="step" id="ffn-live">
+    <h3><span class="step-num">2.2</span> Live: train it, watch every weight move</h3>
+    <p>The task is the value <b>20 steps ahead</b>. One step ahead is too easy: a plain linear model on the window already gets an NRMSE of 0.0006.
+      Press <b>Train</b>. The heatmap is the first layer: one row per hidden unit, one column per position in the window. Every cell changes.</p>
+    <div class="viz" id="viz-ffn"></div>
+    <div class="callout"><p><b>The window is all the memory it has.</b> The Mackey–Glass equation feeds back <span class="tex" data-tex="x(t-17)">x(t−17)</span>. Set
+      <span class="tex" data-tex="L = 3">L = 3</span> and train: the test NRMSE stays near 0.18 whatever the network does, because the information is not in its input.
+      <span class="tex" data-tex="L = 10">L = 10</span> gives about 0.017, <span class="tex" data-tex="L = 20">L = 20</span> about 0.010. Press <b>Reset</b> to try another seed. The loss is non-convex,
+      so each run ends somewhere slightly different.</p></div>
+  </article>
+</section>
+
+<!-- ───────────────────────── 3. Reservoir ───────────────────────── -->
+<section class="stage" id="s-res">
+  <header class="stage-head">
+    <span class="stage-num">3</span>
+    <div>
+      <h2>The reservoir: a random recurrent network nobody trains</h2>
+      <p>Jaeger (2001, echo state networks) and Maass, Natschläger &amp; Markram (2002, liquid state machines) proposed the same trick independently.
+        Keep a big recurrent network, but don't train it: draw its weights at random, scale them so the network is stable, and let the input drive it.
+        Learning only fits a linear readout.</p>
+    </div>
+  </header>
+
+  <article class="step" id="res-model">
+    <h3><span class="step-num">3.1</span> The update, its three knobs, and the readout</h3>
+    <div class="formula"><span class="tex" data-tex="x(t) = (1-\alpha)\,x(t-1) + \alpha \tanh\!\big(W_{\text{in}}\,u(t) + W x(t-1) + b\big)">x(t) = (1−α) x(t−1) + α tanh(W_in u(t) + W x(t−1) + b)</span></div>
+    <p>Three numbers shape a reservoir:</p>
+    <ul>
+      <li>the <b>spectral radius</b> <span class="tex" data-tex="\rho">ρ</span>, the largest <span class="tex" data-tex="|\lambda|">|λ|</span> among the eigenvalues of <span class="tex" data-tex="W">W</span>: how strongly the state echoes itself;</li>
+      <li>the <b>leak rate</b> <span class="tex" data-tex="\alpha">α</span>: how fast the state reacts (small α gives a slow, smooth state);</li>
+      <li>the <b>input gain</b>: how hard the input pushes the neurons into the nonlinear part of tanh.</li>
+    </ul>
+    <p>Here each neuron listens to 10 random others. <span class="tex" data-tex="W">W</span> is drawn once and rescaled to the chosen ρ. The page estimates ρ by power iteration,
+      and <code>tools/check.mjs</code> compares that estimate with numpy's eigenvalues. Then only the readout is fitted:</p>
+    <div class="formula"><span class="tex" data-tex="W_{\text{out}} = \arg\min_{W} \frac1n \sum_t \big\lVert W f(t) - y(t) \big\rVert^2 + \lambda \lVert W \rVert^2 = Y F^{\top}\big(F F^{\top} + \lambda n I\big)^{-1}, \qquad f(t) = \big[1;\ u(t);\ x(t)\big]">W_out = Y Fᵀ (F Fᵀ + λnI)⁻¹, f(t) = [1; u(t); x(t)]</span></div>
+    <p>That is ridge regression: one linear solve with an <span class="tex" data-tex="(N+2)\times(N+2)">(N+2)×(N+2)</span> matrix. λ is chosen on the validation part, as in any regression.</p>
+  </article>
+
+  <article class="step" id="res-inside">
+    <h3><span class="step-num">3.2</span> Live: inside a reservoir</h3>
+    <p>100 neurons, driven by the Mackey–Glass series. Two copies of the same reservoir start from different random states (runs A and B). The lower-right
+      chart shows how far apart they are, on a log scale.</p>
+    <div class="viz" id="viz-inside"></div>
+    <p>At the default settings the two runs merge after about 80 steps, down to machine precision. That is the <b>echo state property</b>. The reservoir forgets
+      where it started, and its state becomes a function of the recent input history alone. This is why a readout trained on one stretch of data still works on
+      another. It is also why training skips the first steps, the <i>washout</i>, when the state still depends on <span class="tex" data-tex="x(0)">x(0)</span>.</p>
+    <div class="callout warn"><p><b>"ρ &lt; 1" is a rule of thumb, not the condition.</b> At ρ = 1.2 the runs still merge (after about 180 steps); at ρ = 1.5 they do not within 300.
+      Now set ρ = 2 and the input gain to 2. The strong input saturates the neurons, and the runs merge again after about 200 steps. Whether a reservoir has
+      the echo state property depends on the reservoir <i>and</i> its input together.</p></div>
+  </article>
+
+  <article class="step" id="res-memory">
+    <h3><span class="step-num">3.3</span> Memory: a window you don't have to choose</h3>
+    <p>Drive the reservoir with white noise, and train one linear readout per delay <span class="tex" data-tex="k">k</span> to reproduce <span class="tex" data-tex="u(t-k)">u(t−k)</span> from the state at time
+      <span class="tex" data-tex="t">t</span>. This is Jaeger's (2002) memory task. <span class="tex" data-tex="r^2 = 1">r² = 1</span> is perfect recall, 0 is none. A window of
+      <span class="tex" data-tex="L">L</span> values recalls exactly the delays it contains, and nothing beyond.</p>
+    <div class="viz" id="viz-memory"></div>
+    <p>The reservoir's memory fades instead of stopping. With N = 100, ρ = 0.9, α = 1 and a small input gain, its <b>memory capacity</b>
+      <span class="tex" data-tex="\sum_k r^2(k)">Σ r²(k)</span> is about 30; theory caps it at N. Push ρ to 0.99 and it rises to about 34. Raise the input gain to 1
+      and the nonlinearity eats memory (about 12). Lower α to 0.3 and the state turns slow and smooth, so fast details are gone (about 11). The reservoir trades
+      exact recall for a long, fading, nonlinear summary, and there is no <span class="tex" data-tex="L">L</span> to choose.</p>
+  </article>
+</section>
+
+<!-- ───────────────────────── 4. Race ───────────────────────── -->
+<section class="stage interlude" id="s-race">
+  <header class="stage-head">
+    <span class="stage-num">4</span>
+    <div>
+      <h2>Head to head <small>one task · one clock</small></h2>
+      <p>Four models on one task: Mackey–Glass, 20 steps ahead, the same splits. The linear AR model, the ELM and the ESN are trained only at the readout,
+        each in a single ridge solve. The FFN trains every weight for 150 epochs.</p>
+    </div>
+  </header>
+
+  <article class="step" id="race-live">
+    <h3><span class="step-num">4.1</span> The race</h3>
+    <p>Press <b>Start</b>. Each dot is a one-shot fit, placed at the moment it finished. The curve is the FFN's test error while it trains. The dashed lines mark
+      the error the FFN would have to reach. Run a few seeds: the spread between them is the price of a non-convex loss.</p>
+    <div class="viz" id="viz-race"></div>
+  </article>
+
+  <article class="step" id="race-read">
+    <h3><span class="step-num">4.2</span> What the race shows</h3>
+    <ul>
+      <li><b>Readout-only training is fast, and here it is also accurate.</b> The ESN and the ELM reach a test NRMSE of about 0.0004–0.0005 in about
+        0.1–0.2 s. The FFN needs about 2 s to reach about 0.010. Same data, same validation split.</li>
+      <li><b>The speed comes from the training, not from the recurrence.</b> The ELM gets exactly the FFN's input, a window, and is about as accurate as the ESN.
+        What makes it fast is that its hidden layer is random and fixed, which leaves a convex problem.</li>
+      <li><b>The recurrence buys memory without a window.</b> Set <span class="tex" data-tex="L = 3">L = 3</span>. Every window model collapses (FFN ≈ 0.18, ELM ≈ 0.13,
+        linear ≈ 0.60), while the ESN doesn't change: it never had a window.</li>
+      <li><b>Linear features are not enough.</b> The linear AR model on the same window scores about 0.52. The accuracy comes from the many nonlinear random features.</li>
+    </ul>
+    <div class="callout"><p><b>So why isn't everything a reservoir?</b> Gradient training scales to deep networks and large datasets. It learns its own features, where a
+      random reservoir can only hope the right ones are among its random ones, and it handles inputs such as images or text, where a fixed random projection is a weak prior.
+      Reservoirs shine on low-dimensional dynamical signals, on small data, and where training must be cheap or has to happen in physical hardware
+      (optical, electronic or mechanical systems used as the reservoir).</p></div>
+  </article>
+</section>
+
+<!-- ───────────────────────── 5. Forecasting ───────────────────────── -->
+<section class="stage" id="s-fc">
+  <header class="stage-head">
+    <span class="stage-num">5</span>
+    <div>
+      <h2>Forecasting a real time series</h2>
+      <p>A forecast is only as trustworthy as the evaluation around it. This part runs the same models on two real series from this repository and
+        on Mackey–Glass, following the steps that keep a forecast honest.</p>
+    </div>
+  </header>
+
+  <article class="step" id="fc-setup">
+    <h3><span class="step-num">5.1</span> The recipe</h3>
+    <ol>
+      <li><b>Split by time:</b> train, then validation, then test. Never shuffle across the boundaries; a forecast must not see the future.</li>
+      <li><b>Scale with the training part only</b> (its mean and standard deviation), and apply the same transform to the rest.</li>
+      <li><b>Drop the reservoir's washout</b> (the first 50 steps here), when its state still depends on <span class="tex" data-tex="x(0) = 0">x(0) = 0</span>.</li>
+      <li><b>Choose hyperparameters on validation</b> (λ, the FFN's best epoch), then look at the test once.</li>
+      <li><b>Beat the baselines:</b> <i>persistence</i> <span class="tex" data-tex="\hat y(t+h) = z(t)">ŷ(t+h) = z(t)</span>, and a <i>seasonal naive</i> forecast when the
+        series has a season (the same day last week). A model that cannot beat them is not forecasting.</li>
+      <li><b>Forecast every horizon at once</b> (direct multi-step): one readout column, or one FFN output unit, per horizon <span class="tex" data-tex="h">h</span>.</li>
+    </ol>
+    <div class="formula"><span class="tex" data-tex="\mathrm{NRMSE}_h = \frac{\sqrt{\tfrac1n \sum_t \big(\hat y(t+h) - y(t+h)\big)^2}}{\operatorname{std}\big(y(t+h)\big)}">NRMSE_h = RMSE_h / std(y)</span></div>
+  </article>
+
+  <article class="step" id="fc-lab">
+    <h3><span class="step-num">5.2</span> Live: the forecasting lab</h3>
+    <p>Pick a series. The ESN, the linear AR model and the baselines are fitted right away; the FFN trains when you ask (a few seconds). The ρ and α sliders
+      re-fit the ESN live. Move the starting point of the forecast through the test period.</p>
+    <div class="viz" id="viz-lab"></div>
+    <p>What to look for:</p>
+    <ul>
+      <li><b>Electricity demand.</b> Every learned model beats both baselines: by a wide margin for tomorrow (NRMSE ≈ 0.34–0.38 against 0.70 for "same day last week") and
+        by a little a week out (≈ 0.60 against 0.68). The FFN is slightly ahead, and the ESN ties the linear model. The largest errors fall on holidays, which none of these models knows about.</li>
+      <li><b>ECG.</b> The ESN is best a few milliseconds ahead (0.08 against 0.20 for the FFN at 4 ms). Further out the two are close. Here the FFN is ahead at
+        100 ms (0.55 against 0.61); with other random draws, as in notebook 00, the ESN is. Neither predicts exactly when the next beat starts. That timing jitter
+        (beat-to-beat intervals from 733 to 790 ms) is most of the error.</li>
+      <li><b>Mackey–Glass.</b> A deterministic system is the reservoir's home ground. The ESN scores 0.010 at 50 steps ahead, the FFN 0.09.</li>
+    </ul>
+    <div class="callout"><p>Read the table, not just the chart. On noisy real data the reservoir is competitive, not magic. What it always wins is the fit time:
+      tens to hundreds of milliseconds against seconds of training.</p></div>
+  </article>
+
+  <article class="step" id="fc-free">
+    <h3><span class="step-num">5.3</span> Closed loop: forecasting by running free</h3>
+    <div class="flows" aria-hidden="true">
+      <b>training</b>
+      <div class="flow">
+        <span class="node">true <span class="tex" data-tex="u(t)">u(t)</span></span><span class="op">→</span>
+        <span class="node">model</span><span class="op">→</span>
+        <span class="node">ŷ(t+1)<small>compared with y(t+1)</small></span>
+      </div>
+      <b>free run</b>
+      <div class="flow">
+        <span class="node accent">ŷ(t)</span><span class="op">→</span>
+        <span class="node loop">model</span><span class="op">→</span>
+        <span class="node accent">ŷ(t+1)<small>becomes the next input</small></span>
+      </div>
+    </div>
+    <p>To forecast far ahead you can also train a one-step model and feed each prediction back as its next input. The model becomes an autonomous dynamical
+      system that imitates the real one, and its errors compound. This is the setting that made reservoirs famous (Jaeger &amp; Haas, <i>Science</i>, 2004).</p>
+    <div class="viz" id="viz-free"></div>
+    <p>Across seeds, the ESN stays within 0.2 standard deviations of the truth for about 540–860 steps (10–17 quasi-periods). The FFN, trained on the same
+      one-step task with early stopping, lasts about 65–150 steps. Note how the ESN's λ is chosen: by the length of its valid free run on the validation part.
+      The λ with the best one-step error is often too small to be stable once the model runs free.</p>
+  </article>
+</section>
+
+<!-- ───────────────────────── 6. NG-RC ───────────────────────── -->
+<section class="stage" id="s-ng">
+  <header class="stage-head">
+    <span class="stage-num">6</span>
+    <div>
+      <h2>NG-RC: the reservoir without the reservoir</h2>
+      <p>Gauthier, Bollt, Griffith &amp; Barbosa (2021) asked what the random reservoir actually contributes. Their <i>next-generation reservoir computing</i>
+        drops it. The "state" is a few delayed inputs and their products: a nonlinear vector autoregression (NVAR). Most of the notebooks in this repository use this method.</p>
+    </div>
+  </header>
+
+  <article class="step" id="ng-idea">
+    <h3><span class="step-num">6.1</span> Features: delays and their products</h3>
+    <div class="formula"><span class="tex" data-tex="\mathbb O_{\text{lin}}(t) = \big[v(t),\ v(t-s),\ \dots,\ v(t-(k-1)s)\big], \qquad \mathbb O_{\text{total}} = c \oplus \mathbb O_{\text{lin}} \oplus \big\lceil \mathbb O_{\text{lin}} \otimes \mathbb O_{\text{lin}} \big\rceil, \qquad v(t+1) = v(t) + W_{\text{out}}\, \mathbb O_{\text{total}}(t)">O_lin = [v(t), v(t−s), …], O_total = c ⊕ O_lin ⊕ ⌈O_lin ⊗ O_lin⌉, v(t+1) = v(t) + W_out O_total</span></div>
+    <p><span class="tex" data-tex="\lceil \otimes \rceil">⌈⊗⌉</span> means the unique products (monomials). The readout predicts the step <span class="tex" data-tex="v(t+1) - v(t)">v(t+1) − v(t)</span>,
+      like one step of a numerical integrator. It is ridge regression again, now on a few dozen chosen features instead of hundreds of random ones.</p>
+  </article>
+
+  <article class="step" id="ng-count">
+    <h3><span class="step-num">6.2</span> How many features?</h3>
+    <p>Count them for any number of channels <span class="tex" data-tex="d">d</span>, taps <span class="tex" data-tex="k">k</span> and degrees. The three examples are the configurations used by the notebooks in this repository.</p>
+    <div class="viz" id="viz-count"></div>
+    <p>The count grows fast. The cubic terms of 4 values already make 20; of 10 values, 220. That is why NG-RC suits low-dimensional systems.</p>
+  </article>
+
+  <article class="step" id="ng-lorenz">
+    <h3><span class="step-num">6.3</span> Live: Lorenz-63, NG-RC against an ESN</h3>
+    <p>The Lorenz system (<span class="tex" data-tex="\sigma = 10,\ \rho = 28,\ \beta = 8/3">σ = 10, ρ = 28, β = 8/3</span>, <span class="tex" data-tex="\Delta t = 0.025">Δt = 0.025</span>) is chaotic: nearby states move apart by a factor of
+      <span class="tex" data-tex="e">e</span> every <b>Lyapunov time</b>, <span class="tex" data-tex="1/0.906 \approx 1.1">1/0.906 ≈ 1.1</span> time units, or 44 steps. Both models learn from the same points, then run free.</p>
+    <div class="viz" id="viz-lorenz"></div>
+    <p>With 400 training points, NG-RC stays valid for about 4 Lyapunov times on average and the ESN for about 3.5. With 100 points the gap is 3 against 1. NG-RC
+      needs a single past point to start (<span class="tex" data-tex="k-1 = 1">k − 1 = 1</span>) instead of the ESN's 200-step washout, and has 84 trained weights instead of 912.
+      Its advantage is data efficiency, not a higher ceiling. Given 1,000 points or more the ESN catches up and pulls ahead: about 5 and 6 Lyapunov times at 1,000 and
+      4,000 points, against 4.6 and 5.2 for NG-RC.</p>
+    <div class="callout"><p><b>Two ablations to try.</b> Untick <i>quadratic</i>: only linear features remain, and the forecast fails within 0.1 Lyapunov times. The
+      nonlinearity does the work. Set <span class="tex" data-tex="k = 1">k = 1</span>: without a delay the model is like a single Euler step, and stays valid about one Lyapunov time.
+      <span class="tex" data-tex="k = 2">k = 2</span> works like a two-step integrator.</p></div>
+  </article>
+
+  <article class="step" id="ng-where">
+    <h3><span class="step-num">6.4</span> Where NG-RC sits on the map</h3>
+    <p>Go back to the map in part 1. NG-RC has a window, like the FFN, and a fixed feature layer with a trained readout, like the ELM. It is the feed-forward cousin of the
+      reservoir: a reservoir you can write down. It works so well on Lorenz partly because the Lorenz equations are themselves quadratic polynomials. A system whose
+      equations look nothing like low-degree monomials needs many more features, or a real reservoir.</p>
+  </article>
+</section>
+
+<!-- ───────────────────────── 7. Takeaways ───────────────────────── -->
+<section class="stage" id="s-end">
+  <header class="stage-head">
+    <span class="stage-num">7</span>
+    <div>
+      <h2>Takeaways</h2>
+      <p>No family wins everywhere. Each wins where its assumptions hold.</p>
+    </div>
+  </header>
+
+  <article class="step" id="end-choose">
+    <h3><span class="step-num">7.1</span> Which one when</h3>
+    <div class="viz scroll-x">
+      <table class="tbl compare">
+        <thead><tr><th></th><th>FFN (backprop)</th><th>ESN (reservoir)</th><th>NG-RC</th></tr></thead>
+        <tbody>
+          <tr><td>Memory</td><td>the window L you choose</td><td>fading, set by ρ, α, N</td><td>k delay taps</td></tr>
+          <tr><td>Training</td><td>iterative, non-convex, seed-dependent</td><td>one ridge solve</td><td>one ridge solve</td></tr>
+          <tr><td>Fit time on this page</td><td>seconds</td><td>0.05–0.3 s</td><td>under 2 ms</td></tr>
+          <tr><td>Knobs</td><td>L, layers, learning rate, epochs</td><td>N, ρ, α, input gain, λ</td><td>k, s, degrees, λ</td></tr>
+          <tr><td>Shines on</td><td>complex real data, large datasets</td><td>dynamical signals, small data, physical hardware</td><td>low-dimensional smooth dynamics, very little data</td></tr>
+          <tr><td>Fails when</td><td>the window is too short; too little data</td><td>the echo state property is lost; very high-dimensional inputs</td><td>many variables (feature explosion)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Whatever you pick, follow the recipe in 5.1: chronological splits, scaling on train only, validation for every choice, and baselines in every table.</p>
+  </article>
+
+  <article class="step" id="end-notebooks">
+    <h3><span class="step-num">7.2</span> The notebooks in this repository</h3>
+    <ul class="nb-list">
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/00_ffn_vs_reservoir_computing.ipynb" target="_blank" rel="noopener"><b>00 · FFN vs reservoir computing</b></a>: every experiment on this page in numpy, step by step. Start here.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/01_esn_lsm_rnn_sine_generator.ipynb" target="_blank" rel="noopener"><b>01 · ESN, LSM and RNN on a sine generator</b></a>: three models for a frequency-modulated sine.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/02_esn_vs_lstm.ipynb" target="_blank" rel="noopener"><b>02 · ESN vs LSTM</b></a>: a numpy ESN against a Keras LSTM, accuracy and training time.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/03_ngrc_forced_oscillator.ipynb" target="_blank" rel="noopener"><b>03 · NG-RC for a forced oscillator</b></a>: polynomial features vs NG-RC, Lyapunov time, fixed points.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/04_ngrc_lorenz_double_scroll.ipynb" target="_blank" rel="noopener"><b>04 · NG-RC on Lorenz and the double scroll</b></a>: Gauthier et al.'s experiments, against a classic reservoir.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/05_esn_lorenz_rescompy.ipynb" target="_blank" rel="noopener"><b>05 · ESN on Lorenz with rescompy</b></a>: the same system with a reservoir library.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/06_lsm_spiking_network.ipynb" target="_blank" rel="noopener"><b>06 · Liquid state machine</b></a>: a spiking reservoir in PyTorch, firing rates and F–I curves.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/07_ecg_forecast_rc_library.ipynb" target="_blank" rel="noopener"><b>07 · ECG forecast with a reservoir library</b></a>: <code>reservoir_computing</code>'s forecaster on the ECG of part 5.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/08_ecg_forecast_esn_warmup.ipynb" target="_blank" rel="noopener"><b>08 · ECG forecast with a warmed-up ESN</b></a>: window in, window out, and why the washout matters.</li>
+      <li><a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/blob/master/notebooks/09_basins_of_attraction_duffing.ipynb" target="_blank" rel="noopener"><b>09 · Basins of attraction</b></a>: fixed points and basins of the Duffing oscillator, the dynamical-systems background.</li>
+    </ul>
+  </article>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>References: H. Jaeger, <i>The "echo state" approach to analysing and training recurrent neural networks</i>, GMD Report 148 (2001) and <i>Short term memory in echo state networks</i>, GMD Report 152 (2002) ·
+    W. Maass, T. Natschläger, H. Markram, <i>Real-time computing without stable states</i>, Neural Computation 14 (2002) ·
+    H. Jaeger, H. Haas, <i>Harnessing nonlinearity: predicting chaotic systems and saving energy in wireless communication</i>, Science 304 (2004) ·
+    M. Lukoševičius, <i>A practical guide to applying echo state networks</i> (2012) ·
+    G.-B. Huang, Q.-Y. Zhu, C.-K. Siew, <i>Extreme learning machine: theory and applications</i>, Neurocomputing 70 (2006) ·
+    D. J. Gauthier, E. Bollt, A. Griffith, W. A. S. Barbosa, <a href="https://doi.org/10.1038/s41467-021-25801-2" target="_blank" rel="noopener"><i>Next generation reservoir computing</i></a>, Nature Communications 12 (2021) ·
+    M. C. Mackey, L. Glass, <i>Oscillation and chaos in physiological control systems</i>, Science 197 (1977) · E. N. Lorenz, <i>Deterministic nonperiodic flow</i> (1963).</p>
+  <p>Data: daily electricity demand of Spain, 2014–2018 (<a href="https://www.kaggle.com/code/manualrg/daily-electricity-demand-forecast-machine-learning/data" target="_blank" rel="noopener">Kaggle</a>) and an ECG recording
+    (<a href="https://www.kaggle.com/datasets/denisandrikov/ecg-timeseries-for-prediction" target="_blank" rel="noopener">Kaggle</a>), both in this repository's <code>dataset/</code>; Mackey–Glass and Lorenz are integrated in the page.</p>
+  <p>Source: <a href="https://github.com/D2718281828nis/ML-Reservoir_Computing/tree/master/explainer" target="_blank" rel="noopener">explainer/</a> in D2718281828nis/ML-Reservoir_Computing.
+    <code>tools/build_assets.py</code> builds the data file, and <code>tools/check.mjs</code> checks the page's math against numpy. Design shared with the
+    <a href="https://d2718281828nis.github.io/ML-Transformers/autoencoders/" target="_blank" rel="noopener">Autoencoder Explainer</a>.</p>
+</footer>
+
+<div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+</body>
+</html>
